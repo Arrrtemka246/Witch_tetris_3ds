@@ -54,7 +54,7 @@ jobs:
           unzip -q /tmp/makerom.zip -d /tmp/makerom
           find /tmp/makerom -type f -name makerom -exec cp {} "$GITHUB_WORKSPACE/makerom" \;
           chmod +x "$GITHUB_WORKSPACE/makerom"
-          "$GITHUB_WORKSPACE/makerom" -h || true
+          "$GITHUB_WORKSPACE/makerom" -help || true
 
       - name: Convert 3DSX to CXI
         shell: bash
@@ -67,7 +67,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          ./makerom             -f cia             -o witch_tetris_3ds.cia             -target t             -i witch_tetris_3ds.cxi:0:0
+          ./makerom             -f cia             -o witch_tetris_3ds.cia             -target t             -i witch_tetris_3ds.cxi:0:0             -ignoresign             -icon witch_tetris_3ds.smdh
           ls -lh witch_tetris_3ds.cia
           sha256sum witch_tetris_3ds.cia | tee witch_tetris_3ds.cia.sha256
 
