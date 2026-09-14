@@ -1,0 +1,83 @@
+name: Build Nintendo 3DS CIA
+
+on:
+  push:
+    branches:
+      - chatgpt/cia-build
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-cia:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository with Git LFS
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Verify input files
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ls -lh witch_tetris_3ds.3dsx witch_tetris_3ds.smdh
+          file witch_tetris_3ds.3dsx witch_tetris_3ds.smdh || true
+          test "$(stat -c%s witch_tetris_3ds.3dsx)" -gt 1000000
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake build-essential libtool curl unzip git-lfs
+
+      - name: Build cxitool
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 --branch cxi-stuff https://github.com/devkitPro/3dstools.git /tmp/3dstools
+          cd /tmp/3dstools
+          ./autogen.sh
+          ./configure
+          make -j"$(nproc)" cxitool
+          cp cxitool "$GITHUB_WORKSPACE/cxitool"
+          "$GITHUB_WORKSPACE/cxitool" --help || true
+
+      - name: Install makerom
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3             -o /tmp/makerom.zip             https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.19.0/makerom-v0.19.0-ubuntu_x86_64.zip
+          unzip -q /tmp/makerom.zip -d /tmp/makerom
+          find /tmp/makerom -type f -name makerom -exec cp {} "$GITHUB_WORKSPACE/makerom" \;
+          chmod +x "$GITHUB_WORKSPACE/makerom"
+          "$GITHUB_WORKSPACE/makerom" -h || true
+
+      - name: Convert 3DSX to CXI
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./cxitool             -n WTetris             -c CTR-H-WTTR             -t 000400000FCA3D00             witch_tetris_3ds.3dsx             witch_tetris_3ds.cxi
+          ls -lh witch_tetris_3ds.cxi
+
+      - name: Package CIA
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./makerom             -f cia             -o witch_tetris_3ds.cia             -target t             -i witch_tetris_3ds.cxi:0:0
+          ls -lh witch_tetris_3ds.cia
+          sha256sum witch_tetris_3ds.cia | tee witch_tetris_3ds.cia.sha256
+
+      - name: Upload CIA
+        uses: actions/upload-artifact@v4
+        with:
+          name: witch-tetris-3ds-cia
+          path: |
+            witch_tetris_3ds.cia
+            witch_tetris_3ds.cia.sha256
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
