@@ -13,7 +13,25 @@ permissions:
   contents: read
 
 jobs:
+  prepare-lfs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: Verify original 3DSX
+        run: |
+          test "$(stat -c%s witch_tetris_3ds.3dsx)" -gt 1000000
+          ls -lh witch_tetris_3ds.3dsx
+      - uses: actions/upload-artifact@v4
+        with:
+          name: original-3dsx
+          path: witch_tetris_3ds.3dsx
+          compression-level: 0
+          retention-days: 1
+
   build:
+    needs: prepare-lfs
     runs-on: ubuntu-latest
     container:
       image: devkitpro/devkitarm:latest
@@ -24,14 +42,18 @@ jobs:
         with:
           lfs: false
 
+      - name: Download original 3DSX
+        uses: actions/download-artifact@v4
+        with:
+          name: original-3dsx
+          path: .
+
       - name: Install dependencies
         shell: bash
         run: |
           set -eux
           apt-get update
-          apt-get install -y git-lfs curl unzip autoconf automake libtool
-          git lfs install
-          git -C "$GITHUB_WORKSPACE" lfs pull
+          apt-get install -y curl unzip autoconf automake libtool
           dkp-pacman -S --needed --noconfirm 3ds-dev 3ds-libmpg123
 
       - name: Extract original RomFS assets
