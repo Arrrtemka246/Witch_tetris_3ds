@@ -1,0 +1,177 @@
+name: Build Native 3DS RC2 Fast
+
+on:
+  push:
+    branches:
+      - chatgpt/3ds-fixes-rc1
+    paths:
+      - '.github/workflows/build-native-rc2-fast.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: native-3ds-rc2-fast
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitarm:latest
+      options: --user 0
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Reuse verified original 3DSX
+        uses: actions/download-artifact@v4
+        with:
+          name: original-3dsx
+          path: .
+          repository: Arrrtemka246/Witch_tetris_3ds
+          run-id: 34924208786
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify original 3DSX
+        shell: bash
+        run: |
+          set -eux
+          test "$(stat -c%s witch_tetris_3ds.3dsx)" -gt 1000000
+          ls -lh witch_tetris_3ds.3dsx
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -eux
+          apt-get update
+          apt-get install -y curl unzip autoconf automake libtool bzip2 make imagemagick
+          dkp-pacman -Syyu --noconfirm
+          dkp-pacman -S --needed --noconfirm 3ds-dev
+
+      - name: Build mpg123 for Nintendo 3DS
+        shell: bash
+        run: |
+          set -eux
+          cd /tmp
+          curl -L --fail --retry 3 -o mpg123.tar.bz2 https://downloads.sourceforge.net/project/mpg123/mpg123/1.32.3/mpg123-1.32.3.tar.bz2
+          tar xf mpg123.tar.bz2
+          cd mpg123-1.32.3
+          ./configure             --host=arm-none-eabi             --prefix="$DEVKITPRO/portlibs/3ds"             --disable-shared             --enable-static             --with-cpu=generic_fpu             CC="$DEVKITARM/bin/arm-none-eabi-gcc"             AR="$DEVKITARM/bin/arm-none-eabi-ar"             RANLIB="$DEVKITARM/bin/arm-none-eabi-ranlib"             CFLAGS="-O2 -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft -D_3DS -D__3DS__ -DNO_CATCHSIGNAL"
+          make -j"$(nproc)" src/libmpg123/libmpg123.la
+          mkdir -p "$DEVKITPRO/portlibs/3ds/lib" "$DEVKITPRO/portlibs/3ds/include"
+          LIB="$(find src/libmpg123 -type f -name libmpg123.a | head -n1)"
+          HDR="$(find . -type f -name mpg123.h | head -n1)"
+          test -n "$LIB"
+          test -n "$HDR"
+          cp "$LIB" "$DEVKITPRO/portlibs/3ds/lib/libmpg123.a"
+          cp "$HDR" "$DEVKITPRO/portlibs/3ds/include/mpg123.h"
+
+      - name: Extract original RomFS assets
+        shell: bash
+        run: |
+          set -eux
+          rm -rf native3ds/romfs
+          mkdir -p native3ds/romfs
+          python3 - <<'PY'
+          import struct
+          from pathlib import Path
+          src=Path("witch_tetris_3ds.3dsx")
+          data=src.read_bytes()
+          magic,hs,*_=struct.unpack_from("<IHH",data,0)
+          assert magic==0x58534433
+          fs_off=struct.unpack_from("<I",data,40)[0]
+          rom=memoryview(data)[fs_off:]
+          hdr_sz,dh_off,dh_sz,dm_off,dm_sz,fh_off,fh_sz,fm_off,fm_sz,fd_off=struct.unpack_from("<10I",rom,0)
+          assert hdr_sz==0x28
+          NONE=0xffffffff
+          def u32(o): return struct.unpack_from("<I",rom,o)[0]
+          def u64(o): return struct.unpack_from("<Q",rom,o)[0]
+          def name(o,n): return bytes(rom[o:o+n]).decode("utf-16le","replace")
+          seen=set(); out=Path("native3ds/romfs")
+          def walk(doff,parts):
+              if doff==NONE or doff in seen:return
+              seen.add(doff); b=dm_off+doff
+              parent,sib,sub,fil,nh,nl=struct.unpack_from("<6I",rom,b)
+              nm=name(b+0x18,nl); here=parts+([nm] if nm else [])
+              f=fil
+              while f!=NONE:
+                  fb=fm_off+f
+                  parent,fsib=struct.unpack_from("<II",rom,fb)
+                  off=u64(fb+8); size=u64(fb+16)
+                  nh2,nl2=struct.unpack_from("<II",rom,fb+24)
+                  fn=name(fb+0x20,nl2)
+                  dest=out.joinpath(*here,fn); dest.parent.mkdir(parents=True,exist_ok=True)
+                  start=fd_off+off; dest.write_bytes(bytes(rom[start:start+size])); f=fsib
+              d=sub
+              while d!=NONE:
+                  db=dm_off+d; dsib=u32(db+4); walk(d,here); d=dsib
+          walk(0,[])
+          print("Extracted",sum(1 for p in out.rglob("*") if p.is_file()),"files")
+          PY
+          test -f native3ds/romfs/gfx/bg_menu.t3x
+          test -f native3ds/romfs/audio/menu_1.mp3
+
+      - name: Add PORN-code gallery cards
+        shell: bash
+        run: |
+          set -eux
+          convert "assets/secrets/porn/W.I.T.C.H._S01E12_%2816%29.webp" -resize '512x256>' /tmp/secret_porn0.png
+          convert "assets/secrets/porn/sddefault.jpg" -resize '512x256>' /tmp/secret_porn1.png
+          tex3ds /tmp/secret_porn0.png -f rgba8888 -z auto -o native3ds/romfs/gfx/secret_porn0.t3x
+          tex3ds /tmp/secret_porn1.png -f rgba8888 -z auto -o native3ds/romfs/gfx/secret_porn1.t3x
+          test -s native3ds/romfs/gfx/secret_porn0.t3x
+          test -s native3ds/romfs/gfx/secret_porn1.t3x
+
+      - name: Build 3DSX
+        shell: bash
+        run: |
+          set -eux
+          cd native3ds
+          make -j"$(nproc)"
+          ls -lh witch_tetris_3ds_rc2.3dsx
+
+      - name: Build cxitool
+        shell: bash
+        run: |
+          set -eux
+          git clone --depth 1 --branch cxi-stuff https://github.com/devkitPro/3dstools.git /tmp/3dstools
+          cd /tmp/3dstools
+          ./autogen.sh
+          ./configure
+          make -j"$(nproc)" cxitool
+          cp cxitool "$GITHUB_WORKSPACE/cxitool"
+
+      - name: Install makerom
+        shell: bash
+        run: |
+          set -eux
+          curl -L --fail --retry 3 -o /tmp/makerom.zip https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.19.0/makerom-v0.19.0-ubuntu_x86_64.zip
+          unzip -q /tmp/makerom.zip -d /tmp/makerom
+          find /tmp/makerom -type f -name makerom -exec cp {} "$GITHUB_WORKSPACE/makerom" \;
+          chmod +x "$GITHUB_WORKSPACE/makerom"
+
+      - name: Package CIA
+        shell: bash
+        run: |
+          set -eux
+          ./cxitool -n WTetris -c CTR-H-WTTR -t 000400000FCA3D00 native3ds/witch_tetris_3ds_rc2.3dsx witch_tetris_3ds_rc2.cxi
+          ./makerom -f cia -o witch_tetris_3ds_rc2.cia -target t -i witch_tetris_3ds_rc2.cxi:0:0 -ignoresign -icon witch_tetris_3ds.smdh
+          sha256sum witch_tetris_3ds_rc2.cia | tee witch_tetris_3ds_rc2.cia.sha256
+          ls -lh witch_tetris_3ds_rc2.cia
+
+      - name: Upload RC2
+        uses: actions/upload-artifact@v4
+        with:
+          name: witch-tetris-3ds-rc2-final
+          path: |
+            witch_tetris_3ds_rc2.cia
+            witch_tetris_3ds_rc2.cia.sha256
+            native3ds/witch_tetris_3ds_rc2.3dsx
+            native3ds/witch_tetris_3ds_rc2.map
+          compression-level: 0
+          retention-days: 7
