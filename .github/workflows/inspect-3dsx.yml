@@ -12,23 +12,32 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
-      - name: Inspect 3DSX header and embedded strings
+      - name: Extract embedded RomFS
         shell: bash
         run: |
           set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential libssl-dev libcurl4-openssl-dev
           python3 - <<'PY'
           import struct, pathlib
           p=pathlib.Path('witch_tetris_3ds.3dsx')
           data=p.read_bytes()
-          vals=struct.unpack_from('<IHHIIIIII', data, 0)
-          print('size', len(data))
-          print('header', vals)
-          magic, hsize, rhsize, ver, flags, code, ro, dat, bss = vals
-          if hsize >= 44:
-              smdh_off,smdh_size,romfs_off=struct.unpack_from('<III',data,32)
-              print('ext',hex(smdh_off),smdh_size,hex(romfs_off), 'romfs_size', len(data)-romfs_off)
-              pathlib.Path('/tmp/romfs.bin').write_bytes(data[romfs_off:])
-          for needle in [b'main.py',b'pygame',b'assets/',b'W.I.T.C.H. Tetris',b'romfs:/']:
-              print(needle, data.find(needle))
+          smdh_off,smdh_size,romfs_off=struct.unpack_from('<III',data,32)
+          print('size',len(data),'smdh',hex(smdh_off),smdh_size,'romfs',hex(romfs_off),len(data)-romfs_off)
+          pathlib.Path('/tmp/romfs.bin').write_bytes(data[romfs_off:])
           PY
-          strings -a witch_tetris_3ds.3dsx | grep -E -m 50 'main\.py|pygame|romfs|W\.I\.T\.C\.H|assets/' || true
+          git clone --depth 1 https://github.com/dnasdw/3dstool.git /tmp/3dstool-src
+          cmake -S /tmp/3dstool-src -B /tmp/3dstool-build -DUSE_DEP=OFF
+          cmake --build /tmp/3dstool-build -j2
+          TOOL="$(find /tmp/3dstool-build -type f -name 3dstool | head -1)"
+          "$TOOL" -x -t romfs -f /tmp/romfs.bin --romfs-dir /tmp/romfs
+          find /tmp/romfs -type f -printf '%P\t%s\n' | sort | tee /tmp/romfs_manifest.txt
+          echo "--- likely data/config/script files ---"
+          find /tmp/romfs -type f | grep -Ei '\.(json|txt|ini|cfg|lua|py|xml|csv|yaml|yml)$' || true
+          echo "--- root ---"
+          find /tmp/romfs -maxdepth 2 -type f -printf '%P\n' | sort | head -300
+      - name: Upload RomFS manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: romfs-inspection
+          path: /tmp/romfs_manifest.txt
