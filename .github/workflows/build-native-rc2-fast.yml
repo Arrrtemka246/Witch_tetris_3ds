@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-native:
     runs-on: ubuntu-latest
     container:
       image: devkitpro/devkitarm:latest
@@ -45,12 +45,12 @@ jobs:
           test "$(stat -c%s witch_tetris_3ds.3dsx)" -gt 1000000
           ls -lh witch_tetris_3ds.3dsx
 
-      - name: Install dependencies
+      - name: Install native build dependencies
         shell: bash
         run: |
           set -eux
           apt-get update
-          apt-get install -y curl unzip autoconf automake libtool bzip2 make imagemagick
+          apt-get install -y curl bzip2 make imagemagick
           test -x "$DEVKITARM/bin/arm-none-eabi-g++"
           test -f "$DEVKITPRO/libctru/lib/libctru.a"
           test -f "$DEVKITPRO/libctru/include/3ds.h"
@@ -63,7 +63,16 @@ jobs:
           curl -L --fail --retry 3 -o mpg123.tar.bz2 https://downloads.sourceforge.net/project/mpg123/mpg123/1.32.3/mpg123-1.32.3.tar.bz2
           tar xf mpg123.tar.bz2
           cd mpg123-1.32.3
-          ./configure             --host=arm-none-eabi             --prefix="$DEVKITPRO/portlibs/3ds"             --disable-shared             --enable-static             --with-cpu=generic_fpu             CC="$DEVKITARM/bin/arm-none-eabi-gcc"             AR="$DEVKITARM/bin/arm-none-eabi-ar"             RANLIB="$DEVKITARM/bin/arm-none-eabi-ranlib"             CFLAGS="-O2 -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft -D_3DS -D__3DS__ -DNO_CATCHSIGNAL"
+          ./configure \
+            --host=arm-none-eabi \
+            --prefix="$DEVKITPRO/portlibs/3ds" \
+            --disable-shared \
+            --enable-static \
+            --with-cpu=generic_fpu \
+            CC="$DEVKITARM/bin/arm-none-eabi-gcc" \
+            AR="$DEVKITARM/bin/arm-none-eabi-ar" \
+            RANLIB="$DEVKITARM/bin/arm-none-eabi-ranlib" \
+            CFLAGS="-O2 -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft -D_3DS -D__3DS__ -DNO_CATCHSIGNAL"
           make -j"$(nproc)" src/libmpg123/libmpg123.la
           mkdir -p "$DEVKITPRO/portlibs/3ds/lib" "$DEVKITPRO/portlibs/3ds/include"
           LIB="$(find src/libmpg123 -type f -name libmpg123.a | head -n1)"
@@ -137,11 +146,39 @@ jobs:
           cd native3ds
           make -j"$(nproc)"
           ls -lh witch_tetris_3ds_rc2.3dsx
+          test -s witch_tetris_3ds_rc2.3dsx
+
+      - name: Upload native RC2
+        uses: actions/upload-artifact@v4
+        with:
+          name: witch-tetris-3ds-rc2-native
+          path: |
+            native3ds/witch_tetris_3ds_rc2.3dsx
+            native3ds/witch_tetris_3ds_rc2.map
+            witch_tetris_3ds.smdh
+          compression-level: 0
+          retention-days: 1
+
+  package-cia:
+    needs: build-native
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download native RC2
+        uses: actions/download-artifact@v4
+        with:
+          name: witch-tetris-3ds-rc2-native
+          path: package
+
+      - name: Install packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake build-essential libtool curl unzip
 
       - name: Build cxitool
         shell: bash
         run: |
-          set -eux
+          set -euxo pipefail
           git clone --depth 1 --branch cxi-stuff https://github.com/devkitPro/3dstools.git /tmp/3dstools
           cd /tmp/3dstools
           ./autogen.sh
@@ -152,7 +189,7 @@ jobs:
       - name: Install makerom
         shell: bash
         run: |
-          set -eux
+          set -euxo pipefail
           curl -L --fail --retry 3 -o /tmp/makerom.zip https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.19.0/makerom-v0.19.0-ubuntu_x86_64.zip
           unzip -q /tmp/makerom.zip -d /tmp/makerom
           find /tmp/makerom -type f -name makerom -exec cp {} "$GITHUB_WORKSPACE/makerom" \;
@@ -161,20 +198,23 @@ jobs:
       - name: Package CIA
         shell: bash
         run: |
-          set -eux
-          ./cxitool -n WTetris -c CTR-H-WTTR -t 000400000FCA3D00 native3ds/witch_tetris_3ds_rc2.3dsx witch_tetris_3ds_rc2.cxi
-          ./makerom -f cia -o witch_tetris_3ds_rc2.cia -target t -i witch_tetris_3ds_rc2.cxi:0:0 -ignoresign -icon witch_tetris_3ds.smdh
-          sha256sum witch_tetris_3ds_rc2.cia | tee witch_tetris_3ds_rc2.cia.sha256
-          ls -lh witch_tetris_3ds_rc2.cia
+          set -euxo pipefail
+          find package -maxdepth 4 -type f -ls
+          DSX="$(find package -type f -name witch_tetris_3ds_rc2.3dsx | head -1)"
+          SMDH="$(find package -type f -name witch_tetris_3ds.smdh | head -1)"
+          test -n "$DSX"
+          test -n "$SMDH"
+          ./cxitool -n WTetris -c CTR-H-WTTR -t 000400000FCA3D00 "$DSX" witch_tetris_3ds_rc2.cxi
+          ./makerom -f cia -o Witch_Tetris_3DS_RC2.cia -target t -i witch_tetris_3ds_rc2.cxi:0:0 -ignoresign -icon "$SMDH"
+          sha256sum Witch_Tetris_3DS_RC2.cia | tee Witch_Tetris_3DS_RC2.cia.sha256
+          ls -lh Witch_Tetris_3DS_RC2.cia
 
-      - name: Upload RC2
+      - name: Upload final RC2
         uses: actions/upload-artifact@v4
         with:
           name: witch-tetris-3ds-rc2-final
           path: |
-            witch_tetris_3ds_rc2.cia
-            witch_tetris_3ds_rc2.cia.sha256
-            native3ds/witch_tetris_3ds_rc2.3dsx
-            native3ds/witch_tetris_3ds_rc2.map
+            Witch_Tetris_3DS_RC2.cia
+            Witch_Tetris_3DS_RC2.cia.sha256
           compression-level: 0
           retention-days: 7
