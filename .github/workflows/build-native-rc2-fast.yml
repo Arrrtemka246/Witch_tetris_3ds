@@ -151,10 +151,11 @@ jobs:
       - name: Upload native RC2
         uses: actions/upload-artifact@v4
         with:
-          name: witch-tetris-3ds-rc2-native
+          name: witch-tetris-3ds-rc3-native
           path: |
             native3ds/witch_tetris_3ds_rc2.3dsx
             native3ds/witch_tetris_3ds_rc2.map
+            native3ds/source/main.cpp
             witch_tetris_3ds.smdh
           compression-level: 0
           retention-days: 1
@@ -167,7 +168,7 @@ jobs:
       - name: Download native RC2
         uses: actions/download-artifact@v4
         with:
-          name: witch-tetris-3ds-rc2-native
+          name: witch-tetris-3ds-rc3-native
           path: package
 
       - name: Install packaging dependencies
@@ -204,17 +205,17 @@ jobs:
           SMDH="$(find package -type f -name witch_tetris_3ds.smdh | head -1)"
           test -n "$DSX"
           test -n "$SMDH"
-          ./cxitool -n WTetris -c CTR-H-WTTR -t 000400000FCA3D00 "$DSX" witch_tetris_3ds_rc2.cxi
-          ./makerom -f cia -o Witch_Tetris_3DS_RC2.cia -target t -i witch_tetris_3ds_rc2.cxi:0:0 -ignoresign -icon "$SMDH"
-          sha256sum Witch_Tetris_3DS_RC2.cia | tee Witch_Tetris_3DS_RC2.cia.sha256
-          ls -lh Witch_Tetris_3DS_RC2.cia
+          ./cxitool -n WTetris -c CTR-H-WTTR -t 000400000FCA3D00 "$DSX" witch_tetris_3ds_rc3.cxi
+          ./makerom -f cia -o Witch_Tetris_3DS_RC3.cia -target t -i witch_tetris_3ds_rc3.cxi:0:0 -ignoresign -icon "$SMDH"
+          sha256sum Witch_Tetris_3DS_RC3.cia | tee Witch_Tetris_3DS_RC3.cia.sha256
+          ls -lh Witch_Tetris_3DS_RC3.cia
 
       - name: Upload final RC2
         uses: actions/upload-artifact@v4
         with:
-          name: witch-tetris-3ds-rc2-final
+          name: witch-tetris-3ds-rc3-final
           path: |
-            Witch_Tetris_3DS_RC2.cia
-            Witch_Tetris_3DS_RC2.cia.sha256
+            Witch_Tetris_3DS_RC3.cia
+            Witch_Tetris_3DS_RC3.cia.sha256
           compression-level: 0
           retention-days: 7
