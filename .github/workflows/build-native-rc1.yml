@@ -22,13 +22,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
 
       - name: Install dependencies
         shell: bash
         run: |
           set -eux
-          dkp-pacman -S --needed --noconfirm 3ds-dev 3ds-libmpg123 curl unzip autoconf automake libtool
+          apt-get update
+          apt-get install -y git-lfs curl unzip autoconf automake libtool
+          git lfs install
+          git lfs pull
+          dkp-pacman -S --needed --noconfirm 3ds-dev 3ds-libmpg123
 
       - name: Extract original RomFS assets
         shell: bash
