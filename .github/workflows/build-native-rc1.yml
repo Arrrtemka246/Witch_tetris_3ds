@@ -31,7 +31,7 @@ jobs:
           apt-get update
           apt-get install -y git-lfs curl unzip autoconf automake libtool
           git lfs install
-          git lfs pull
+          git -C "$GITHUB_WORKSPACE" lfs pull
           dkp-pacman -S --needed --noconfirm 3ds-dev 3ds-libmpg123
 
       - name: Extract original RomFS assets
