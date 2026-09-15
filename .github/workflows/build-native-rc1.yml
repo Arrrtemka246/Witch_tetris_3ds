@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: native-3ds-rc2
+  cancel-in-progress: true
+
 jobs:
   prepare-lfs:
     runs-on: ubuntu-latest
@@ -74,7 +78,7 @@ jobs:
             CC="$DEVKITARM/bin/arm-none-eabi-gcc" \
             AR="$DEVKITARM/bin/arm-none-eabi-ar" \
             RANLIB="$DEVKITARM/bin/arm-none-eabi-ranlib" \
-            CFLAGS="-O2 -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft -D_3DS -D__3DS__"
+            CFLAGS="-O2 -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft -D_3DS -D__3DS__ -DNO_CATCHSIGNAL"
           make -j"$(nproc)" src/libmpg123/libmpg123.la
           mkdir -p "$DEVKITPRO/portlibs/3ds/lib" "$DEVKITPRO/portlibs/3ds/include"
           LIB="$(find src/libmpg123 -type f -name libmpg123.a | head -n1)"
