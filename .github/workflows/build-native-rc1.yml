@@ -53,9 +53,32 @@ jobs:
         run: |
           set -eux
           apt-get update
-          apt-get install -y curl unzip autoconf automake libtool
+          apt-get install -y curl unzip autoconf automake libtool bzip2 make
           dkp-pacman -Syyu --noconfirm
-          dkp-pacman -S --needed --noconfirm 3ds-dev 3ds-libmpg123
+          dkp-pacman -S --needed --noconfirm 3ds-dev
+
+      - name: Build mpg123 for Nintendo 3DS
+        shell: bash
+        run: |
+          set -eux
+          cd /tmp
+          curl -L --fail --retry 3 -o mpg123.tar.bz2 https://downloads.sourceforge.net/project/mpg123/mpg123/1.32.3/mpg123-1.32.3.tar.bz2
+          tar xf mpg123.tar.bz2
+          cd mpg123-1.32.3
+          ./configure \
+            --host=arm-none-eabi \
+            --prefix="$DEVKITPRO/portlibs/3ds" \
+            --disable-shared \
+            --enable-static \
+            --with-cpu=generic_fpu \
+            CC="$DEVKITARM/bin/arm-none-eabi-gcc" \
+            AR="$DEVKITARM/bin/arm-none-eabi-ar" \
+            RANLIB="$DEVKITARM/bin/arm-none-eabi-ranlib" \
+            CFLAGS="-O2 -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft -D_3DS -D__3DS__"
+          make -j"$(nproc)"
+          make install
+          test -f "$DEVKITPRO/portlibs/3ds/lib/libmpg123.a"
+          test -f "$DEVKITPRO/portlibs/3ds/include/mpg123.h"
 
       - name: Extract original RomFS assets
         shell: bash
