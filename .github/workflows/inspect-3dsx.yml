@@ -106,12 +106,20 @@ jobs:
           print("\n".join(x[0] for x in manifest if x[0].lower().endswith(".py")))
           PY
 
+      - name: Extract native strings
+        shell: bash
+        run: |
+          strings -a -n 4 witch_tetris_3ds.3dsx > native_strings.txt
+          grep -Ein "phobos|pause|porn|matrix|vtd|menu|room|continue|restart|new game|options|settings|source/|\\.c(pp)?" native_strings.txt > native_strings_relevant.txt || true
+
       - uses: actions/upload-artifact@v4
         with:
           name: romfs-inspection
           path: |
             3dsx_layout.txt
             romfs_manifest.txt
+            native_strings.txt
+            native_strings_relevant.txt
             _romfs_extract/
           if-no-files-found: error
           retention-days: 2
