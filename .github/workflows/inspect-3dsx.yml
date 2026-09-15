@@ -139,4 +139,5 @@ jobs:
             3dstool-help.txt
             romfs-files.txt
             romfs-interesting.txt
+            prefix.bin
           if-no-files-found: error
