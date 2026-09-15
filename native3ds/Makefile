@@ -7,7 +7,7 @@ endif
 TOPDIR ?= $(CURDIR)
 include $(DEVKITARM)/3ds_rules
 
-TARGET      := witch_tetris_3ds_rc1
+TARGET      := witch_tetris_3ds_rc2
 BUILD       := build
 SOURCES     := source
 DATA        := data
