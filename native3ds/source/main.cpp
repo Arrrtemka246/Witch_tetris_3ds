@@ -202,7 +202,7 @@ static void openCodeKeyboard(){
 
 static void drawMenu(){
  bgMenu.drawCover(0,0,TOP_W,H); C2D_DrawRectSolid(0,0,0.2f,TOP_W,H,C2D_Color32(0,0,0,90)); phobosMenu.drawFit(250,25,145,210,0.3f);
- drawText(18,20,0.72f,ACCENT,"W.I.T.C.H. TETRIS 3DS"); drawText(20,48,0.45f,WHITE,"RC1 - editable native rebuild");
+ drawText(18,20,0.72f,ACCENT,"W.I.T.C.H. TETRIS 3DS"); drawText(20,48,0.45f,WHITE,"RC2 - native fixes test build");
  const char* items[]={"NEW GAME","CUTSCENES","SETTINGS","EXIT"}; for(int i=0;i<4;i++){u32 col=i==menuIndex?WHITE:DIM;if(i==menuIndex)C2D_DrawRectSolid(18,82+i*34,0.4f,205,28,C2D_Color32(95,45,120,220));drawText(28,85+i*34,0.55f,col,"> %s",items[i]);}
  C2D_TargetClear(botTarget,BG); C2D_SceneBegin(botTarget); centerText(160,25,0.6f,ACCENT,"MAIN MENU"); centerText(160,70,0.45f,WHITE,"D-Pad: select   A: open"); centerText(160,100,0.42f,DIM,"Phobos Room is gameplay-only"); centerText(160,185,0.4f,DIM,"START: exit");
 }
