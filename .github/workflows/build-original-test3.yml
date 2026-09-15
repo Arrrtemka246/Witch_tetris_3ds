@@ -39,6 +39,7 @@ jobs:
           echo "73894e036fed69f4af0bb4407874932a5bac6eac6dbca3d546055418f7aaf8dc  witch_tetris_3ds.3dsx" | sha256sum -c -
           apt-get update
           apt-get install -y imagemagick python3-pil git
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git fetch --depth=1 origin main
           command -v tex3ds
 
