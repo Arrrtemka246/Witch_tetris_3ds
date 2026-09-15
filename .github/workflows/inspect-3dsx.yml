@@ -1,0 +1,117 @@
+name: Inspect 3DSX RomFS
+
+on:
+  push:
+    branches:
+      - chatgpt/3ds-fixes-rc1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Extract RomFS metadata and Python sources
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          import struct
+          from pathlib import Path
+
+          src = Path("witch_tetris_3ds.3dsx")
+          data = src.read_bytes()
+          magic, header_size, reloc_hdr_size, fmt, flags, code_sz, ro_sz, data_sz, bss_sz = struct.unpack_from("<IHHIIIIII", data, 0)
+          assert magic == 0x58534433, hex(magic)
+          smdh_off = smdh_sz = fs_off = 0
+          if header_size >= 44:
+              smdh_off, smdh_sz, fs_off = struct.unpack_from("<III", data, 32)
+          print("3DSX size", len(data))
+          print("header_size", header_size, "code", code_sz, "rodata", ro_sz, "data", data_sz, "bss", bss_sz)
+          print("smdh", smdh_off, smdh_sz, "romfs", fs_off)
+          assert fs_off > 0 and fs_off < len(data)
+
+          rom = memoryview(data)[fs_off:]
+          vals = struct.unpack_from("<10I", rom, 0)
+          hdr_sz, dir_hash_off, dir_hash_sz, dir_meta_off, dir_meta_sz, file_hash_off, file_hash_sz, file_meta_off, file_meta_sz, file_data_off = vals
+          print("romfs header", vals)
+          assert hdr_sz == 0x28
+
+          out = Path("_romfs_extract")
+          out.mkdir(exist_ok=True)
+          manifest = []
+
+          def u32(off): return struct.unpack_from("<I", rom, off)[0]
+          def u64(off): return struct.unpack_from("<Q", rom, off)[0]
+          NONE = 0xFFFFFFFF
+
+          seen_dirs=set()
+          seen_files=set()
+
+          def read_name(base, name_len):
+              raw = bytes(rom[base:base+name_len])
+              return raw.decode("utf-16le", errors="replace")
+
+          def walk_dir(doff, parent_parts):
+              if doff in seen_dirs or doff == NONE:
+                  return
+              seen_dirs.add(doff)
+              base = dir_meta_off + doff
+              parent, sibling, first_sub, first_file, next_hash, name_len = struct.unpack_from("<6I", rom, base)
+              name = read_name(base+0x18, name_len)
+              parts = parent_parts + ([name] if name else [])
+              foff = first_file
+              while foff != NONE:
+                  if foff in seen_files:
+                      break
+                  seen_files.add(foff)
+                  fb = file_meta_off + foff
+                  fparent, fsibling = struct.unpack_from("<II", rom, fb)
+                  data_off = u64(fb+8)
+                  data_size = u64(fb+16)
+                  next_hash_f, fname_len = struct.unpack_from("<II", rom, fb+24)
+                  fname = read_name(fb+0x20, fname_len)
+                  rel = "/".join(parts+[fname])
+                  manifest.append((rel, data_size, foff, data_off))
+                  if fname.lower().endswith((".py",".json",".txt",".md")):
+                      dest = out / rel
+                      dest.parent.mkdir(parents=True, exist_ok=True)
+                      start = file_data_off + data_off
+                      dest.write_bytes(bytes(rom[start:start+data_size]))
+                  foff = fsibling
+              sub = first_sub
+              while sub != NONE:
+                  sb = dir_meta_off + sub
+                  ssibling = u32(sb+4)
+                  walk_dir(sub, parts)
+                  sub = ssibling
+
+          walk_dir(0, [])
+          manifest.sort()
+          Path("romfs_manifest.txt").write_text(
+              "\n".join(f"{p}\t{sz}\tmeta={mo}\tdata={do}" for p,sz,mo,do in manifest),
+              encoding="utf-8"
+          )
+          Path("3dsx_layout.txt").write_text(
+              f"size={len(data)}\nheader_size={header_size}\ncode={code_sz}\nrodata={ro_sz}\ndata={data_sz}\nbss={bss_sz}\nsmdh_off={smdh_off}\nsmdh_sz={smdh_sz}\nfs_off={fs_off}\nromfs_header={vals}\nfiles={len(manifest)}\n",
+              encoding="utf-8"
+          )
+          print("files", len(manifest))
+          print("\n".join(x[0] for x in manifest if x[0].lower().endswith(".py")))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: romfs-inspection
+          path: |
+            3dsx_layout.txt
+            romfs_manifest.txt
+            _romfs_extract/
+          if-no-files-found: error
+          retention-days: 2
