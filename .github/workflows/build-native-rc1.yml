@@ -75,8 +75,14 @@ jobs:
             AR="$DEVKITARM/bin/arm-none-eabi-ar" \
             RANLIB="$DEVKITARM/bin/arm-none-eabi-ranlib" \
             CFLAGS="-O2 -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft -D_3DS -D__3DS__"
-          make -j"$(nproc)"
-          make install
+          make -j"$(nproc)" src/libmpg123/libmpg123.la
+          mkdir -p "$DEVKITPRO/portlibs/3ds/lib" "$DEVKITPRO/portlibs/3ds/include"
+          LIB="$(find src/libmpg123 -type f -name libmpg123.a | head -n1)"
+          HDR="$(find . -type f -name mpg123.h | head -n1)"
+          test -n "$LIB"
+          test -n "$HDR"
+          cp "$LIB" "$DEVKITPRO/portlibs/3ds/lib/libmpg123.a"
+          cp "$HDR" "$DEVKITPRO/portlibs/3ds/include/mpg123.h"
           test -f "$DEVKITPRO/portlibs/3ds/lib/libmpg123.a"
           test -f "$DEVKITPRO/portlibs/3ds/include/mpg123.h"
 
