@@ -1,4 +1,4 @@
-name: Build Native 3DS RC1
+name: Build Native 3DS RC2
 
 on:
   push:
@@ -53,7 +53,7 @@ jobs:
         run: |
           set -eux
           apt-get update
-          apt-get install -y curl unzip autoconf automake libtool bzip2 make
+          apt-get install -y curl unzip autoconf automake libtool bzip2 make imagemagick
           dkp-pacman -Syyu --noconfirm
           dkp-pacman -S --needed --noconfirm 3ds-dev
 
@@ -139,13 +139,24 @@ jobs:
           test -f native3ds/romfs/gfx/bg_menu.t3x
           test -f native3ds/romfs/audio/menu_1.mp3
 
+      - name: Add safe PORN-code gallery cards
+        shell: bash
+        run: |
+          set -eux
+          convert "assets/secrets/porn/W.I.T.C.H._S01E12_%2816%29.webp" -resize '512x256>' /tmp/secret_porn0.png
+          convert "assets/secrets/porn/sddefault.jpg" -resize '512x256>' /tmp/secret_porn1.png
+          tex3ds /tmp/secret_porn0.png -f rgba8888 -z auto -o native3ds/romfs/gfx/secret_porn0.t3x
+          tex3ds /tmp/secret_porn1.png -f rgba8888 -z auto -o native3ds/romfs/gfx/secret_porn1.t3x
+          test -s native3ds/romfs/gfx/secret_porn0.t3x
+          test -s native3ds/romfs/gfx/secret_porn1.t3x
+
       - name: Build 3DSX
         shell: bash
         run: |
           set -eux
           cd native3ds
           make -j"$(nproc)"
-          ls -lh witch_tetris_3ds_rc1.3dsx
+          ls -lh witch_tetris_3ds_rc2.3dsx
 
       - name: Build cxitool
         shell: bash
@@ -171,19 +182,19 @@ jobs:
         shell: bash
         run: |
           set -eux
-          ./cxitool -n WTetris -c CTR-H-WTTR -t 000400000FCA3D00 native3ds/witch_tetris_3ds_rc1.3dsx witch_tetris_3ds_rc1.cxi
-          ./makerom -f cia -o witch_tetris_3ds_rc1.cia -target t -i witch_tetris_3ds_rc1.cxi:0:0 -ignoresign -icon witch_tetris_3ds.smdh
-          sha256sum witch_tetris_3ds_rc1.cia | tee witch_tetris_3ds_rc1.cia.sha256
-          ls -lh witch_tetris_3ds_rc1.cia
+          ./cxitool -n WTetris -c CTR-H-WTTR -t 000400000FCA3D00 native3ds/witch_tetris_3ds_rc2.3dsx witch_tetris_3ds_rc2.cxi
+          ./makerom -f cia -o witch_tetris_3ds_rc2.cia -target t -i witch_tetris_3ds_rc2.cxi:0:0 -ignoresign -icon witch_tetris_3ds.smdh
+          sha256sum witch_tetris_3ds_rc2.cia | tee witch_tetris_3ds_rc2.cia.sha256
+          ls -lh witch_tetris_3ds_rc2.cia
 
       - name: Upload RC1
         uses: actions/upload-artifact@v4
         with:
-          name: witch-tetris-3ds-rc1
+          name: witch-tetris-3ds-rc2
           path: |
-            witch_tetris_3ds_rc1.cia
-            witch_tetris_3ds_rc1.cia.sha256
-            native3ds/witch_tetris_3ds_rc1.3dsx
-            native3ds/witch_tetris_3ds_rc1.map
+            witch_tetris_3ds_rc2.cia
+            witch_tetris_3ds_rc2.cia.sha256
+            native3ds/witch_tetris_3ds_rc2.3dsx
+            native3ds/witch_tetris_3ds_rc2.map
           compression-level: 0
           retention-days: 7
