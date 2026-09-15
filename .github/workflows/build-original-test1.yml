@@ -1,0 +1,127 @@
+name: Build Original 3DS TEST1
+
+on:
+  push:
+    branches:
+      - chatgpt/original-test1
+    paths:
+      - '.github/workflows/build-original-test1.yml'
+      - '.github/original-test1-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Verify original working 3DSX
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "73894e036fed69f4af0bb4407874932a5bac6eac6dbca3d546055418f7aaf8dc  witch_tetris_3ds.3dsx" | sha256sum -c -
+          test "$(stat -c%s witch_tetris_3ds.3dsx)" = "217052104"
+
+      - name: Patch original binary conservatively
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp witch_tetris_3ds.3dsx Witch_Tetris_3DS_Original_TEST1.3dsx
+          python3 - <<'PY'
+          import struct, hashlib
+          from pathlib import Path
+
+          p=Path("Witch_Tetris_3DS_Original_TEST1.3dsx")
+          b=bytearray(p.read_bytes())
+          magic,hsize,rhsize,ver,flags,code_sz,ro_sz,data_sz,bss_sz=struct.unpack_from("<IHHIIIIII",b,0)
+          assert magic==0x58534433
+          code_off=hsize+3*rhsize
+          ro_off=code_off+code_sz
+          CODE_BASE=0x00100000
+
+          def patch_word(addr, old, new, note):
+              off=code_off+(addr-CODE_BASE)
+              got=struct.unpack_from("<I",b,off)[0]
+              assert got==old, f"{note}: {addr:#x}: expected {old:#010x}, got {got:#010x}"
+              struct.pack_into("<I",b,off,new)
+              print(f"{note}: {addr:#x} {old:#010x} -> {new:#010x}")
+
+          # Main menu: 5 entries -> 4 entries.
+          # Original order: NEW GAME / SETTINGS / CUTSCENES / PHOBOS ROOM / EXIT.
+          # Keep the first three, make entry 4 EXIT, and make navigation wrap at 4.
+          patch_word(0x0010831c, 0xe3540005, 0xe3540004, "render only 4 menu items")
+          patch_word(0x00113150, 0xe3a01005, 0xe3a01004, "menu up wraps at 4")
+          patch_word(0x00113170, 0xe3a01005, 0xe3a01004, "menu down wraps at 4")
+          patch_word(0x00113190, 0xe3550003, 0xe3550002, "menu index 3 goes to EXIT path")
+
+          # Visible entry 4: replace PHOBOS ROOM pointer with existing EXIT pointer.
+          room_ptr_off=ro_off+0x1a8
+          exit_ptr_off=ro_off+0x1ac
+          old_room=struct.unpack_from("<I",b,room_ptr_off)[0]
+          exit_ptr=struct.unpack_from("<I",b,exit_ptr_off)[0]
+          assert old_room==0x00071d2c, hex(old_room)
+          assert exit_ptr==0x00071d38, hex(exit_ptr)
+          struct.pack_into("<I",b,room_ptr_off,exit_ptr)
+          print(f"menu pointer: PHOBOS ROOM {old_room:#x} -> EXIT {exit_ptr:#x}")
+
+          # VTD crash guard:
+          # Keep the existing VTD-active flag toggle, then skip the fragile music/vector
+          # rebuild which is the entry-time crash candidate. Renderer/input remain original.
+          patch_word(0x0010ebbc, 0xe5943010, 0xea000078, "VTD entry crash guard")
+
+          p.write_bytes(b)
+          print("patched sha256",hashlib.sha256(b).hexdigest())
+          PY
+          sha256sum Witch_Tetris_3DS_Original_TEST1.3dsx | tee Witch_Tetris_3DS_Original_TEST1.3dsx.sha256
+
+      - name: Install packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake build-essential libtool curl unzip
+
+      - name: Build cxitool
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 --branch cxi-stuff https://github.com/devkitPro/3dstools.git /tmp/3dstools
+          cd /tmp/3dstools
+          ./autogen.sh
+          ./configure
+          make -j"$(nproc)" cxitool
+          cp cxitool "$GITHUB_WORKSPACE/cxitool"
+
+      - name: Install makerom
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3 -o /tmp/makerom.zip https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.19.0/makerom-v0.19.0-ubuntu_x86_64.zip
+          unzip -q /tmp/makerom.zip -d /tmp/makerom
+          find /tmp/makerom -type f -name makerom -exec cp {} "$GITHUB_WORKSPACE/makerom" \;
+          chmod +x "$GITHUB_WORKSPACE/makerom"
+
+      - name: Package CIA from patched original
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./cxitool -n WTetris -c CTR-H-WTTR -t 000400000FCA3D00 Witch_Tetris_3DS_Original_TEST1.3dsx Witch_Tetris_3DS_Original_TEST1.cxi
+          ./makerom -f cia -o Witch_Tetris_3DS_Original_TEST1.cia -target t -i Witch_Tetris_3DS_Original_TEST1.cxi:0:0 -ignoresign -icon witch_tetris_3ds.smdh
+          sha256sum Witch_Tetris_3DS_Original_TEST1.cia | tee Witch_Tetris_3DS_Original_TEST1.cia.sha256
+          ls -lh Witch_Tetris_3DS_Original_TEST1.cia Witch_Tetris_3DS_Original_TEST1.3dsx
+
+      - name: Upload TEST1
+        uses: actions/upload-artifact@v4
+        with:
+          name: witch-tetris-3ds-original-test1
+          path: |
+            Witch_Tetris_3DS_Original_TEST1.cia
+            Witch_Tetris_3DS_Original_TEST1.cia.sha256
+            Witch_Tetris_3DS_Original_TEST1.3dsx
+            Witch_Tetris_3DS_Original_TEST1.3dsx.sha256
+          compression-level: 0
+          retention-days: 7
