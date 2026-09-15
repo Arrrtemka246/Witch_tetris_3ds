@@ -54,6 +54,7 @@ jobs:
           set -eux
           apt-get update
           apt-get install -y curl unzip autoconf automake libtool
+          dkp-pacman -Syyu --noconfirm
           dkp-pacman -S --needed --noconfirm 3ds-dev 3ds-libmpg123
 
       - name: Extract original RomFS assets
