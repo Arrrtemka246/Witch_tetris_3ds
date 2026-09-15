@@ -886,7 +886,7 @@ class Game(PlaytestFeatures):
         # Secret/easter-egg state. Codes are read from event.unicode, so EN/RU layouts differ naturally.
         self.secret_codes = {
             "porn": "porn_gallery",
-            "порн": "ru_18",
+            "порн": "porn_gallery",
             "vtd": "vtd",
             "втд": "vtd",
             "валентин": "vtd",
@@ -2285,8 +2285,8 @@ class Game(PlaytestFeatures):
                     self.secret_image = None
             self.secret_overlay = "porn_gallery"
             self.music.pause()
-            if random.randrange(5) == 0:
-                self.play_voice("porn", force=True)
+            # The PORN easter egg always gets Phobos's reaction in the 3DS build.
+            self.play_voice("porn", force=True)
         elif action == "ru_18":
             self.secret_overlay = "ru_18"
             self.secret_timer = FPS
@@ -3262,14 +3262,14 @@ class Game(PlaytestFeatures):
             if key == pygame.K_DOWN or scancode == SC_S:
                 self.pause_menu_index = (self.pause_menu_index + 1) % len(self.pause_menu_items)
                 self.pause_voice_pending = self.pause_menu_index; self.pause_voice_delay = int(FPS * 0.20); return
-            if key in (pygame.K_RETURN,):
+            if key in (pygame.K_RETURN, pygame.K_SPACE):
+                # On 3DS the confirm face button is exposed as SPACE by the
+                # runtime, so SPACE must confirm the highlighted pause item.
                 item = self.pause_menu_items[self.pause_menu_index]
                 if item == "CONTINUE": self.toggle_pause()
                 elif item == "RESTART": self.start_new_game()
                 else: self.return_to_menu()
                 return
-            if key == pygame.K_SPACE:
-                self.toggle_pause(); return
             if key == pygame.K_ESCAPE:
                 self.return_to_menu(); return
             return
@@ -3708,7 +3708,7 @@ class Game(PlaytestFeatures):
             y=WINDOW_H//2-45+i*75
             if i==self.pause_menu_index: pygame.draw.rect(self.canvas,(82,42,105),(WINDOW_W//2-190,y-10,380,55))
             t=self.font.render(("▶  " if i==self.pause_menu_index else "   ")+item,True,COLORS["text"]); self.canvas.blit(t,t.get_rect(center=(WINDOW_W//2,y+15)))
-        hint=self.small.render("↑ ↓ select   ENTER confirm   SPACE continue   ESC menu",True,COLORS["text"]); self.canvas.blit(hint,hint.get_rect(center=(WINDOW_W//2,WINDOW_H//2+210)))
+        hint=self.small.render("↑ ↓ select   ENTER / A confirm   ESC menu",True,COLORS["text"]); self.canvas.blit(hint,hint.get_rect(center=(WINDOW_W//2,WINDOW_H//2+210)))
 
     def choose_story_winner(self):
         """Resolve the 200-line meta choice without changing tetromino geometry."""
