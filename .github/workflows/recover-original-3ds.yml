@@ -36,7 +36,8 @@ jobs:
             -import reverse3ds/Witch_Tetris_original_recovered.elf \
             -overwrite -analysisTimeoutPerFile 900 \
             -scriptPath "$GITHUB_WORKSPACE/reverse3ds/ghidra" \
-            -postScript DecompileAll.java "$GITHUB_WORKSPACE/reverse3ds/output/decompiled_all.c" "$GITHUB_WORKSPACE/reverse3ds/output/function_map.tsv"
+            -postScript DecompileAll.java "$GITHUB_WORKSPACE/reverse3ds/output/decompiled_all.c" "$GITHUB_WORKSPACE/reverse3ds/output/function_map.tsv" \
+            -postScript RecoverGameMain.java "$GITHUB_WORKSPACE/reverse3ds/output/witch_main.c"
       - name: Extract useful string clues
         run: |
           strings -a -t x witch_tetris_3ds.3dsx | grep -Ei 'romfs:|matrix|porn|vtd|phobos|pause|tetris|cutscene|winner|room' > reverse3ds/output/string_clues.txt || true
@@ -51,5 +52,6 @@ jobs:
             reverse3ds/output/function_map.tsv
             reverse3ds/output/string_clues.txt
             reverse3ds/output/key_decompile_hits.txt
+            reverse3ds/output/witch_main.c
           compression-level: 6
           retention-days: 7
