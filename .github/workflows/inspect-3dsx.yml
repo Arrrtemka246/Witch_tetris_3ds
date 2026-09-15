@@ -51,15 +51,85 @@ jobs:
           chmod +x ./3dstool
           ./3dstool --help | tee 3dstool-help.txt || true
 
-      - name: Extract RomFS
+      - name: Extract embedded Level-3 RomFS
         shell: bash
         run: |
           set -euxo pipefail
-          mkdir -p romfs_dir
-          ./3dstool -xvtf romfs romfs.bin --romfs-dir romfs_dir | tee extract.log
-          find romfs_dir -maxdepth 4 -type f -printf '%p\t%s\n' | sort | tee romfs-files.txt
-          echo "Top-level:"
-          find romfs_dir -maxdepth 2 -type f -printf '%p\n' | sort | head -200
+          python3 - <<'PY'
+          import os, struct
+          from pathlib import Path
+
+          data = Path("romfs.bin").read_bytes()
+          hdr = struct.unpack_from("<10I", data, 0)
+          (header_len, dir_hash_off, dir_hash_size, dir_meta_off, dir_meta_size,
+           file_hash_off, file_hash_size, file_meta_off, file_meta_size, file_data_off) = hdr
+          print("ROMFS HEADER", hdr)
+          assert header_len == 0x28
+          NULL = 0xFFFFFFFF
+          out = Path("romfs_dir")
+          out.mkdir(exist_ok=True)
+
+          def safe_name(raw):
+              name = raw.decode("utf-16le", errors="replace")
+              if not name or name in (".", "..") or "/" in name or "\\\\" in name:
+                  raise ValueError(f"unsafe romfs name: {name!r}")
+              return name
+
+          def read_dir(off):
+              p = dir_meta_off + off
+              parent, sibling, child_dir, child_file, hnext, name_len = struct.unpack_from("<6I", data, p)
+              name = "" if name_len == 0 else safe_name(data[p+24:p+24+name_len])
+              return parent, sibling, child_dir, child_file, hnext, name
+
+          def read_file(off):
+              p = file_meta_off + off
+              parent, sibling = struct.unpack_from("<2I", data, p)
+              data_off, data_size = struct.unpack_from("<2Q", data, p+8)
+              hnext, name_len = struct.unpack_from("<2I", data, p+24)
+              name = safe_name(data[p+32:p+32+name_len])
+              return parent, sibling, data_off, data_size, hnext, name
+
+          seen_dirs=set()
+          seen_files=set()
+          manifest=[]
+
+          def walk_dir(off, base):
+              if off in seen_dirs:
+                  return
+              seen_dirs.add(off)
+              parent, sibling, child_dir, child_file, hnext, name = read_dir(off)
+              dbase = base if off == 0 else base / name
+              dbase.mkdir(parents=True, exist_ok=True)
+
+              cur = child_file
+              while cur != NULL:
+                  if cur in seen_files:
+                      break
+                  seen_files.add(cur)
+                  _, nxt, doff, dsize, _, fname = read_file(cur)
+                  dest = dbase / fname
+                  start = file_data_off + doff
+                  dest.write_bytes(data[start:start+dsize])
+                  manifest.append((str(dest), dsize))
+                  cur = nxt
+
+              cur = child_dir
+              while cur != NULL:
+                  entry = read_dir(cur)
+                  nxt = entry[1]
+                  walk_dir(cur, dbase)
+                  cur = nxt
+
+          walk_dir(0, out)
+          manifest.sort()
+          with open("romfs-files.txt", "w", encoding="utf-8") as fp:
+              for name, size in manifest:
+                  fp.write(f"{name}\\t{size}\\n")
+          print("files", len(manifest), "dirs", len(seen_dirs))
+          for name, size in manifest[:300]:
+              print(size, name)
+          PY
+          grep -Ei '\\.(py|lua|json)$|main|boot|pygame|python|3ds' romfs-files.txt | head -500 | tee romfs-interesting.txt || true
 
       - name: Upload inspection
         uses: actions/upload-artifact@v4
@@ -67,6 +137,6 @@ jobs:
           name: romfs-inspection
           path: |
             3dstool-help.txt
-            extract.log
             romfs-files.txt
+            romfs-interesting.txt
           if-no-files-found: error
