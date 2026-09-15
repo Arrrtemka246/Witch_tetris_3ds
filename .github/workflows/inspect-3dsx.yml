@@ -1,0 +1,72 @@
+name: Inspect 3DSX RomFS
+
+on:
+  push:
+    branches:
+      - chatgpt/next-test-build
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Inspect 3DSX header
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ls -lh witch_tetris_3ds.3dsx witch_tetris_3ds.smdh
+          python3 - <<'PY'
+          import struct, pathlib
+          p=pathlib.Path('witch_tetris_3ds.3dsx')
+          data=p.read_bytes()
+          print('size',len(data))
+          print('magic',data[:4])
+          magic, header_size, reloc_hdr_size, ver, flags, code, ro, dat, bss = struct.unpack_from('<IHHIIIIII', data, 0)
+          print('header_size',header_size,'reloc_hdr_size',reloc_hdr_size,'ver',ver,'flags',flags)
+          print('segments',code,ro,dat,bss)
+          if header_size >= 44:
+              smdh_off,smdh_size,romfs_off=struct.unpack_from('<III',data,32)
+              print('smdh_off',smdh_off,'smdh_size',smdh_size,'romfs_off',romfs_off)
+              pathlib.Path('prefix.bin').write_bytes(data[:romfs_off])
+              pathlib.Path('romfs.bin').write_bytes(data[romfs_off:])
+              print('romfs_size',len(data)-romfs_off,'romfs_magic',data[romfs_off:romfs_off+32].hex())
+          PY
+
+      - name: Download 3dstool
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3 -o /tmp/3dstool.tgz https://github.com/dnasdw/3dstool/releases/download/v1.2.6/3dstool_linux_x86_64.tar.gz
+          tar -xzf /tmp/3dstool.tgz -C /tmp
+          find /tmp -type f -name 3dstool -print
+          find /tmp -type f -name 3dstool -exec cp {} ./3dstool \;
+          chmod +x ./3dstool
+          ./3dstool --help | tee 3dstool-help.txt || true
+
+      - name: Extract RomFS
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p romfs_dir
+          ./3dstool -xvtf romfs romfs.bin --romfs-dir romfs_dir | tee extract.log
+          find romfs_dir -maxdepth 4 -type f -printf '%p\t%s\n' | sort | tee romfs-files.txt
+          echo "Top-level:"
+          find romfs_dir -maxdepth 2 -type f -printf '%p\n' | sort | head -200
+
+      - name: Upload inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: romfs-inspection
+          path: |
+            3dstool-help.txt
+            extract.log
+            romfs-files.txt
+          if-no-files-found: error
