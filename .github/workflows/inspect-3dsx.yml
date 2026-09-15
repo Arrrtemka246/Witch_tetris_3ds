@@ -46,8 +46,8 @@ jobs:
           set -euxo pipefail
           curl -L --fail --retry 3 -o /tmp/3dstool.tgz https://github.com/dnasdw/3dstool/releases/download/v1.2.6/3dstool_linux_x86_64.tar.gz
           tar -xzf /tmp/3dstool.tgz -C /tmp
-          find /tmp -type f -name 3dstool -print
-          find /tmp -type f -name 3dstool -exec cp {} ./3dstool \;
+          ls -lh /tmp/3dstool
+          cp /tmp/3dstool ./3dstool
           chmod +x ./3dstool
           ./3dstool --help | tee 3dstool-help.txt || true
 
