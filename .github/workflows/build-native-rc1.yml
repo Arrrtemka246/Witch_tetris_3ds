@@ -1,0 +1,133 @@
+name: Build Native 3DS RC1
+
+on:
+  push:
+    branches:
+      - chatgpt/3ds-fixes-rc1
+    paths:
+      - 'native3ds/**'
+      - '.github/workflows/build-native-rc1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitarm:latest
+      options: --user 0
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -eux
+          dkp-pacman -S --needed --noconfirm 3ds-dev 3ds-libmpg123 curl unzip autoconf automake libtool
+
+      - name: Extract original RomFS assets
+        shell: bash
+        run: |
+          set -eux
+          rm -rf native3ds/romfs
+          mkdir -p native3ds/romfs
+          python3 - <<'PY'
+          import struct
+          from pathlib import Path
+          src=Path("witch_tetris_3ds.3dsx")
+          data=src.read_bytes()
+          magic,hs,*_=struct.unpack_from("<IHH",data,0)
+          assert magic==0x58534433
+          fs_off=struct.unpack_from("<I",data,40)[0]
+          rom=memoryview(data)[fs_off:]
+          hdr_sz,dh_off,dh_sz,dm_off,dm_sz,fh_off,fh_sz,fm_off,fm_sz,fd_off=struct.unpack_from("<10I",rom,0)
+          assert hdr_sz==0x28
+          NONE=0xffffffff
+          def u32(o): return struct.unpack_from("<I",rom,o)[0]
+          def u64(o): return struct.unpack_from("<Q",rom,o)[0]
+          def name(o,n): return bytes(rom[o:o+n]).decode("utf-16le","replace")
+          seen=set()
+          out=Path("native3ds/romfs")
+          def walk(doff,parts):
+              if doff==NONE or doff in seen:return
+              seen.add(doff)
+              b=dm_off+doff
+              parent,sib,sub,fil,nh,nl=struct.unpack_from("<6I",rom,b)
+              nm=name(b+0x18,nl)
+              here=parts+([nm] if nm else [])
+              f=fil
+              while f!=NONE:
+                  fb=fm_off+f
+                  parent,fsib=struct.unpack_from("<II",rom,fb)
+                  off=u64(fb+8); size=u64(fb+16)
+                  nh2,nl2=struct.unpack_from("<II",rom,fb+24)
+                  fn=name(fb+0x20,nl2)
+                  dest=out.joinpath(*here,fn); dest.parent.mkdir(parents=True,exist_ok=True)
+                  start=fd_off+off
+                  dest.write_bytes(bytes(rom[start:start+size]))
+                  f=fsib
+              d=sub
+              while d!=NONE:
+                  db=dm_off+d
+                  dsib=u32(db+4)
+                  walk(d,here)
+                  d=dsib
+          walk(0,[])
+          print("Extracted",sum(1 for p in out.rglob("*") if p.is_file()),"files")
+          PY
+          test -f native3ds/romfs/gfx/bg_menu.t3x
+          test -f native3ds/romfs/audio/menu_1.mp3
+
+      - name: Build 3DSX
+        shell: bash
+        run: |
+          set -eux
+          cd native3ds
+          make -j"$(nproc)"
+          ls -lh witch_tetris_3ds_rc1.3dsx
+
+      - name: Build cxitool
+        shell: bash
+        run: |
+          set -eux
+          git clone --depth 1 --branch cxi-stuff https://github.com/devkitPro/3dstools.git /tmp/3dstools
+          cd /tmp/3dstools
+          ./autogen.sh
+          ./configure
+          make -j"$(nproc)" cxitool
+          cp cxitool "$GITHUB_WORKSPACE/cxitool"
+
+      - name: Install makerom
+        shell: bash
+        run: |
+          set -eux
+          curl -L --fail --retry 3 -o /tmp/makerom.zip https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.19.0/makerom-v0.19.0-ubuntu_x86_64.zip
+          unzip -q /tmp/makerom.zip -d /tmp/makerom
+          find /tmp/makerom -type f -name makerom -exec cp {} "$GITHUB_WORKSPACE/makerom" \;
+          chmod +x "$GITHUB_WORKSPACE/makerom"
+
+      - name: Package CIA
+        shell: bash
+        run: |
+          set -eux
+          ./cxitool -n WTetris -c CTR-H-WTTR -t 000400000FCA3D00 native3ds/witch_tetris_3ds_rc1.3dsx witch_tetris_3ds_rc1.cxi
+          ./makerom -f cia -o witch_tetris_3ds_rc1.cia -target t -i witch_tetris_3ds_rc1.cxi:0:0 -ignoresign -icon witch_tetris_3ds.smdh
+          sha256sum witch_tetris_3ds_rc1.cia | tee witch_tetris_3ds_rc1.cia.sha256
+          ls -lh witch_tetris_3ds_rc1.cia
+
+      - name: Upload RC1
+        uses: actions/upload-artifact@v4
+        with:
+          name: witch-tetris-3ds-rc1
+          path: |
+            witch_tetris_3ds_rc1.cia
+            witch_tetris_3ds_rc1.cia.sha256
+            native3ds/witch_tetris_3ds_rc1.3dsx
+            native3ds/witch_tetris_3ds_rc1.map
+          compression-level: 0
+          retention-days: 7
