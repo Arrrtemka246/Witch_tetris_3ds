@@ -1,0 +1,210 @@
+name: Build Original 3DS TEST3
+
+on:
+  push:
+    branches: [chatgpt/original-test3]
+    paths:
+      - 'reverse3ds/test3/**'
+      - '.github/workflows/build-original-test3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitarm:latest
+      options: --user 0
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: {lfs: false}
+
+      - name: Reuse verified original working 3DSX
+        uses: actions/download-artifact@v4
+        with:
+          name: original-3dsx
+          path: .
+          repository: Arrrtemka246/Witch_tetris_3ds
+          run-id: 34924208786
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify base and install tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "73894e036fed69f4af0bb4407874932a5bac6eac6dbca3d546055418f7aaf8dc  witch_tetris_3ds.3dsx" | sha256sum -c -
+          apt-get update
+          apt-get install -y imagemagick python3-pil git
+          git fetch --depth=1 origin main
+          command -v tex3ds
+
+      - name: Extract original RomFS
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf work && mkdir -p work/romfs
+          python3 - <<'PY'
+          import struct
+          from pathlib import Path
+          data=Path("witch_tetris_3ds.3dsx").read_bytes()
+          fs_off=struct.unpack_from("<I",data,40)[0];rom=memoryview(data)[fs_off:]
+          hdr,dh_o,dh_s,dm_o,dm_s,fh_o,fh_s,fm_o,fm_s,fd_o=struct.unpack_from("<10I",rom,0)
+          NONE=0xffffffff
+          def u32(o):return struct.unpack_from("<I",rom,o)[0]
+          def u64(o):return struct.unpack_from("<Q",rom,o)[0]
+          def nm(o,n):return bytes(rom[o:o+n]).decode("utf-16le","replace")
+          out=Path("work/romfs");seen=set()
+          def walk(doff,parts):
+              if doff==NONE or doff in seen:return
+              seen.add(doff);b=dm_o+doff
+              parent,sib,sub,fil,nh,nl=struct.unpack_from("<6I",rom,b)
+              name=nm(b+24,nl);here=parts+([name] if name else [])
+              f=fil
+              while f!=NONE:
+                  fb=fm_o+f;parent,fsib=struct.unpack_from("<II",rom,fb)
+                  off=u64(fb+8);size=u64(fb+16);nh2,nl2=struct.unpack_from("<II",rom,fb+24)
+                  fn=nm(fb+32,nl2);dest=out.joinpath(*here,fn);dest.parent.mkdir(parents=True,exist_ok=True)
+                  dest.write_bytes(bytes(rom[fd_o+off:fd_o+off+size]));f=fsib
+              d=sub
+              while d!=NONE:
+                  db=dm_o+d;dsib=u32(db+4);walk(d,here);d=dsib
+          walk(0,[])
+          print("files",sum(p.is_file() for p in out.rglob("*")))
+          PY
+          test -f work/romfs/gfx/l100_will.t3x
+          test -f work/romfs/gfx/horror_cells.t3x
+
+      - name: Build TEST3 replacement graphics
+        shell: bash
+        run: |
+          set -euxo pipefail
+          # Pull only authoritative Python-side art; do not merge main code.
+          git show origin/main:assets/cutscenes/lines100/will_action.png > /tmp/will_action.png
+
+          # Remove disconnected alpha islands (the stray hand seen in TEST2), keep the main Will component.
+          python3 - <<'PY'
+          from PIL import Image
+          from collections import deque
+          p="/tmp/will_action.png"; im=Image.open(p).convert("RGBA"); w,h=im.size; a=im.getchannel("A")
+          pix=a.load(); seen=set(); comps=[]
+          for y in range(h):
+              for x in range(w):
+                  if pix[x,y] < 8 or (x,y) in seen: continue
+                  q=[(x,y)];seen.add((x,y));comp=[]
+                  while q:
+                      cx,cy=q.pop();comp.append((cx,cy))
+                      for ny in range(max(0,cy-1),min(h,cy+2)):
+                          for nx in range(max(0,cx-1),min(w,cx+2)):
+                              if (nx,ny) not in seen and pix[nx,ny]>=8:
+                                  seen.add((nx,ny));q.append((nx,ny))
+                  comps.append(comp)
+          comps.sort(key=len,reverse=True)
+          keep=set(comps[0]) if comps else set()
+          px=im.load()
+          for y in range(h):
+              for x in range(w):
+                  if (x,y) not in keep: px[x,y]=(0,0,0,0)
+          im.save("/tmp/will_clean.png")
+          print("components", [len(c) for c in comps[:6]])
+          PY
+          convert /tmp/will_clean.png -trim -resize '239x220>' -gravity center -background none -extent 239x220 /tmp/will_3ds.png
+          tex3ds /tmp/will_3ds.png -f rgba8888 -z auto -o work/romfs/gfx/l100_will.t3x
+
+          # Diagnostic visibility fix: the broken horror atlas caused invisible cells on Phobos route.
+          cp work/romfs/gfx/phase1_cells.t3x work/romfs/gfx/horror_cells.t3x
+
+          # Bring Phobos closer: use current transparent emotion art, clean it, and repack larger.
+          for i in 0 1 2 3 4 5; do
+            n=$(printf "%02d" "$i")
+            git show "origin/main:assets/cutscenes/phobos_room/emotions/emotion_${n}.png" > "/tmp/phobos_${i}.png"
+            convert "/tmp/phobos_${i}.png" -trim -resize '250x235>' -gravity center -background none -extent 250x235 "/tmp/phobos3ds_${i}.png"
+            tex3ds "/tmp/phobos3ds_${i}.png" -f rgba8888 -z auto -o "work/romfs/gfx/phobos_room_pose${i}.t3x"
+          done
+
+          # Preserve TEST2 browserless ChatGPT easter egg with a clean transparent local card.
+          cat > /tmp/chatgpt.svg <<'SVG'
+          <svg xmlns="http://www.w3.org/2000/svg" width="512" height="256" viewBox="0 0 512 256">
+            <g fill="none" stroke="#f4f4f4" stroke-width="14" stroke-linecap="round" transform="translate(118 128)">
+              <ellipse rx="49" ry="27" transform="rotate(0)"/>
+              <ellipse rx="49" ry="27" transform="rotate(60)"/>
+              <ellipse rx="49" ry="27" transform="rotate(120)"/>
+            </g>
+            <text x="210" y="143" font-family="DejaVu Sans" font-size="52" font-weight="600" fill="#f4f4f4">ChatGPT</text>
+          </svg>
+          SVG
+          convert -background none /tmp/chatgpt.svg /tmp/chatgpt.png
+          tex3ds /tmp/chatgpt.png -f rgba8888 -z auto -o work/romfs/gfx/jetix_logo.t3x
+
+          python3 reverse3ds/test3/build_romfs.py work/romfs work/test3.romfs
+          ls -lh work/romfs/gfx/{l100_will,horror_cells,phobos_room_pose0,jetix_logo}.t3x work/test3.romfs
+
+      - name: Patch original native program and build TEST3 3DSX
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 reverse3ds/test3/patch_test3.py witch_tetris_3ds.3dsx work/test3.romfs Witch_Tetris_3DS_Original_TEST3.3dsx
+          sha256sum Witch_Tetris_3DS_Original_TEST3.3dsx | tee Witch_Tetris_3DS_Original_TEST3.3dsx.sha256
+          test -s Witch_Tetris_3DS_Original_TEST3.3dsx
+
+      - name: Upload TEST3 3DSX
+        uses: actions/upload-artifact@v4
+        with:
+          name: witch-tetris-test3-3dsx
+          path: |
+            Witch_Tetris_3DS_Original_TEST3.3dsx
+            Witch_Tetris_3DS_Original_TEST3.3dsx.sha256
+            witch_tetris_3ds.smdh
+          compression-level: 0
+          retention-days: 7
+
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: witch-tetris-test3-3dsx
+          path: package
+      - name: Install packaging tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake build-essential libtool curl unzip
+          git clone --depth 1 --branch cxi-stuff https://github.com/devkitPro/3dstools.git /tmp/3dstools
+          cd /tmp/3dstools
+          ./autogen.sh && ./configure && make -j"$(nproc)" cxitool
+          cp cxitool "$GITHUB_WORKSPACE/cxitool"
+          cd "$GITHUB_WORKSPACE"
+          curl -L --fail --retry 3 -o /tmp/makerom.zip https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.19.0/makerom-v0.19.0-ubuntu_x86_64.zip
+          unzip -q /tmp/makerom.zip -d /tmp/makerom
+          find /tmp/makerom -type f -name makerom -exec cp {} "$GITHUB_WORKSPACE/makerom" \;
+          chmod +x makerom
+      - name: Package TEST3 CIA
+        shell: bash
+        run: |
+          set -euxo pipefail
+          DSX=package/Witch_Tetris_3DS_Original_TEST3.3dsx
+          SMDH=package/witch_tetris_3ds.smdh
+          ./cxitool -n WTetris -c CTR-H-WTTR -t 000400000FCA3D00 "$DSX" Witch_Tetris_3DS_Original_TEST3.cxi
+          ./makerom -f cia -o Witch_Tetris_3DS_Original_TEST3.cia -target t -i Witch_Tetris_3DS_Original_TEST3.cxi:0:0 -ignoresign -icon "$SMDH"
+          sha256sum Witch_Tetris_3DS_Original_TEST3.cia | tee Witch_Tetris_3DS_Original_TEST3.cia.sha256
+          cp "$DSX" .
+          cp package/Witch_Tetris_3DS_Original_TEST3.3dsx.sha256 .
+          ls -lh Witch_Tetris_3DS_Original_TEST3.*
+      - name: Upload final TEST3
+        uses: actions/upload-artifact@v4
+        with:
+          name: witch-tetris-3ds-original-test3
+          path: |
+            Witch_Tetris_3DS_Original_TEST3.cia
+            Witch_Tetris_3DS_Original_TEST3.cia.sha256
+            Witch_Tetris_3DS_Original_TEST3.3dsx
+            Witch_Tetris_3DS_Original_TEST3.3dsx.sha256
+          compression-level: 0
+          retention-days: 7
