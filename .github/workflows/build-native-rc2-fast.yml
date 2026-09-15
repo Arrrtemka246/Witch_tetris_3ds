@@ -5,6 +5,7 @@ on:
     branches:
       - chatgpt/3ds-fixes-rc1
     paths:
+      - 'native3ds/**'
       - '.github/workflows/build-native-rc2-fast.yml'
   workflow_dispatch:
 
