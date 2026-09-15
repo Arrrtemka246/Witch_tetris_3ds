@@ -1,0 +1,34 @@
+name: Inspect 3DSX payload
+on:
+  push:
+    branches: [chatgpt/3ds-next]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: Inspect 3DSX header and embedded strings
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          import struct, pathlib
+          p=pathlib.Path('witch_tetris_3ds.3dsx')
+          data=p.read_bytes()
+          vals=struct.unpack_from('<IHHIIIIII', data, 0)
+          print('size', len(data))
+          print('header', vals)
+          magic, hsize, rhsize, ver, flags, code, ro, dat, bss = vals
+          if hsize >= 44:
+              smdh_off,smdh_size,romfs_off=struct.unpack_from('<III',data,32)
+              print('ext',hex(smdh_off),smdh_size,hex(romfs_off), 'romfs_size', len(data)-romfs_off)
+              pathlib.Path('/tmp/romfs.bin').write_bytes(data[romfs_off:])
+          for needle in [b'main.py',b'pygame',b'assets/',b'W.I.T.C.H. Tetris',b'romfs:/']:
+              print(needle, data.find(needle))
+          PY
+          strings -a witch_tetris_3ds.3dsx | grep -E -m 50 'main\.py|pygame|romfs|W\.I\.T\.C\.H|assets/' || true
