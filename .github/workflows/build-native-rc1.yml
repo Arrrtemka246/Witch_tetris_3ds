@@ -59,8 +59,9 @@ jobs:
           set -eux
           apt-get update
           apt-get install -y curl unzip autoconf automake libtool bzip2 make imagemagick
-          dkp-pacman -Syyu --noconfirm
-          dkp-pacman -S --needed --noconfirm 3ds-dev
+          test -f "$DEVKITPRO/libctru/lib/libctru.a"
+          test -f "$DEVKITPRO/libctru/include/3ds.h"
+          test -f "$DEVKITPRO/libctru/lib/libcitro2d.a"
 
       - name: Build mpg123 for Nintendo 3DS
         shell: bash
