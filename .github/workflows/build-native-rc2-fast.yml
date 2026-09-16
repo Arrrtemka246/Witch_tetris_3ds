@@ -18,7 +18,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare-lfs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: Verify original 3DSX
+        run: |
+          test "$(stat -c%s witch_tetris_3ds.3dsx)" -gt 1000000
+          ls -lh witch_tetris_3ds.3dsx
+      - uses: actions/upload-artifact@v4
+        with:
+          name: original-3dsx-current
+          path: witch_tetris_3ds.3dsx
+          compression-level: 0
+          retention-days: 1
+
   build-native:
+    needs: prepare-lfs
     runs-on: ubuntu-latest
     container:
       image: devkitpro/devkitarm:latest
@@ -29,14 +47,11 @@ jobs:
         with:
           lfs: false
 
-      - name: Reuse verified original 3DSX
+      - name: Download verified original 3DSX
         uses: actions/download-artifact@v4
         with:
-          name: original-3dsx
+          name: original-3dsx-current
           path: .
-          repository: Arrrtemka246/Witch_tetris_3ds
-          run-id: 34924208786
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify original 3DSX
         shell: bash
