@@ -50,7 +50,7 @@ jobs:
         run: |
           set -eux
           apt-get update
-          apt-get install -y curl bzip2 make imagemagick
+          apt-get install -y curl bzip2 make imagemagick ffmpeg
           test -x "$DEVKITARM/bin/arm-none-eabi-g++"
           test -f "$DEVKITPRO/libctru/lib/libctru.a"
           test -f "$DEVKITPRO/libctru/include/3ds.h"
@@ -137,6 +137,53 @@ jobs:
           tex3ds /tmp/secret_porn1.png -f rgba8888 -z auto -o native3ds/romfs/gfx/secret_porn1.t3x
           test -s native3ds/romfs/gfx/secret_porn0.t3x
           test -s native3ds/romfs/gfx/secret_porn1.t3x
+
+      - name: Add offline logo cards
+        shell: bash
+        run: |
+          set -eux
+          curl -L --fail --retry 3 -o /tmp/chatgpt.ico https://chatgpt.com/favicon.ico || true
+          curl -L --fail --retry 3 -o /tmp/suno.ico https://suno.com/favicon.ico || true
+          if identify /tmp/chatgpt.ico >/dev/null 2>&1; then
+            convert '/tmp/chatgpt.ico[0]' -resize '192x192' /tmp/chatgpt.png
+          else
+            convert -size 192x192 xc:'#111b1d' /tmp/chatgpt.png
+          fi
+          if identify /tmp/suno.ico >/dev/null 2>&1; then
+            convert '/tmp/suno.ico[0]' -resize '192x192' /tmp/suno.png
+          else
+            convert -size 192x192 xc:'#6b3df0' /tmp/suno.png
+          fi
+          tex3ds /tmp/chatgpt.png -f rgba8888 -z auto -o native3ds/romfs/gfx/logo_chatgpt.t3x
+          tex3ds /tmp/suno.png -f rgba8888 -z auto -o native3ds/romfs/gfx/logo_suno.t3x
+
+      - name: Prepare native secret videos
+        shell: bash
+        run: |
+          set -eux
+          mkdir -p native3ds/romfs/video/matrix native3ds/romfs/video/porn
+          ffmpeg -y -loglevel error -i assets/secrets/videos/prepared/matrix/audio.wav -codec:a libmp3lame -b:a 96k native3ds/romfs/video/matrix.mp3
+          ffmpeg -y -loglevel error -i assets/secrets/videos/prepared/porn/audio.wav -codec:a libmp3lame -b:a 96k native3ds/romfs/video/porn.mp3
+          matrix_index=0
+          for frame in assets/secrets/videos/prepared/matrix/frames/*.jpg; do
+            source_index="$(basename "$frame" .jpg)"
+            if (( (10#$source_index - 1) % 2 != 0 )); then continue; fi
+            convert "$frame" -resize '400x240^' -gravity center -extent 400x240 /tmp/video_frame.png
+            printf -v output 'native3ds/romfs/video/matrix/matrix_%03d.t3x' "$matrix_index"
+            tex3ds /tmp/video_frame.png -f rgb565 -z auto -o "$output"
+            matrix_index=$((matrix_index + 1))
+          done
+          porn_index=0
+          for frame in assets/secrets/videos/prepared/porn/frames/*.jpg; do
+            convert "$frame" -resize '400x240^' -gravity center -extent 400x240 /tmp/video_frame.png
+            printf -v output 'native3ds/romfs/video/porn/porn_%03d.t3x' "$porn_index"
+            tex3ds /tmp/video_frame.png -f rgb565 -z auto -o "$output"
+            porn_index=$((porn_index + 1))
+          done
+          test "$matrix_index" -eq 214
+          test "$porn_index" -eq 35
+          test -s native3ds/romfs/video/matrix.mp3
+          test -s native3ds/romfs/video/porn.mp3
 
       - name: Build 3DSX
         shell: bash
