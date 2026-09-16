@@ -175,13 +175,15 @@ jobs:
           make -j"$(nproc)" cxitool
           cp cxitool "$GITHUB_WORKSPACE/cxitool"
 
-      - name: Install makerom
+      - name: Build makerom
         shell: bash
         run: |
           set -eux
-          curl -L --fail --retry 3 -o /tmp/makerom.zip https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.19.0/makerom-v0.19.0-ubuntu_x86_64.zip
-          unzip -q /tmp/makerom.zip -d /tmp/makerom
-          find /tmp/makerom -type f -name makerom -exec cp {} "$GITHUB_WORKSPACE/makerom" \;
+          git clone --depth 1 https://github.com/3DSGuy/Project_CTR.git /tmp/Project_CTR
+          cd /tmp/Project_CTR/makerom
+          make deps -j"$(nproc)"
+          make -j"$(nproc)"
+          cp bin/makerom "$GITHUB_WORKSPACE/makerom"
           chmod +x "$GITHUB_WORKSPACE/makerom"
 
       - name: Package CIA
