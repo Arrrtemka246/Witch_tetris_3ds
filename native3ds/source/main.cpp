@@ -99,6 +99,7 @@ struct Audio {
 
 struct Music {
     std::vector<std::string> pool, bag; std::string fixedFirst,last; bool firstPending=true, firstCycle=true; int phase=-1;
+    bool autoAdvance=true;
     void configure(int p){
         if(phase==p) return; phase=p; pool.clear(); bag.clear(); firstPending=true; firstCycle=true; last.clear();
         if(p==0){ fixedFirst="romfs:/audio/menu_1.mp3"; pool={"romfs:/audio/menu_1.mp3","romfs:/audio/menu_2.mp3"}; }
@@ -133,7 +134,10 @@ struct Music {
         else configure(p);
         playNext();
     }
-    void update(){ audio.update(); if(audio.finished){ audio.finished=false; playNext(); } }
+    void update(){
+        audio.update();
+        if(audio.finished && autoAdvance){ audio.finished=false; playNext(); }
+    }
 } music;
 
 enum Mode { MENU, CHARSEL, SETTINGS, GAME, CUTSCENE, WINNER, PHOBOS_ROOM, MATRIX_MODE, VTD_MODE, PORN_MODE };
@@ -205,8 +209,11 @@ static void openCodeKeyboard(){
  char buf[64]={0}; SwkbdState sw; swkbdInit(&sw,SWKBD_TYPE_NORMAL,1,32); swkbdSetHintText(&sw,"MATRIX / VTD / PORN / МАТРИЦА / ВТД / ПОРН"); swkbdSetButton(&sw,SWKBD_BUTTON_RIGHT,"OK",true); swkbdSetFeatures(&sw,SWKBD_DEFAULT_QWERTY|SWKBD_ALLOW_HOME);
  SwkbdButton b=swkbdInputText(&sw,buf,sizeof(buf)); if(b==SWKBD_BUTTON_NONE)return;
  std::string s=buf; for(char& c:s) if((unsigned char)c<128)c=(char)std::tolower((unsigned char)c);
- if(s=="matrix"||s=="матрица"||s=="МАТРИЦА"){returnMode=mode;mode=MATRIX_MODE;secretTimer=60*12;audio.play("romfs:/audio/voice_matrix.mp3");}
- else if(s=="vtd"||s=="valentin"||s=="втд"||s=="валентин"||s=="ВТД"||s=="ВАЛЕНТИН"){returnMode=mode;mode=VTD_MODE;secretTimer=0;audio.play((rand()%2)?"romfs:/audio/vtd_1.mp3":"romfs:/audio/vtd_2.mp3");}
+ if(s=="matrix"||s=="матрица"||s=="МАТРИЦА"){returnMode=mode;mode=MATRIX_MODE;secretTimer=60*12;music.autoAdvance=false;audio.play("romfs:/audio/voice_matrix.mp3");}
+ else if(s=="vtd"||s=="valentin"||s=="втд"||s=="валентин"||s=="ВТД"||s=="ВАЛЕНТИН"){
+  returnMode=mode;mode=VTD_MODE;secretTimer=0;music.autoAdvance=false;
+  if(!audio.play((rand()%2)?"romfs:/audio/vtd_1.mp3":"romfs:/audio/vtd_2.mp3")) running=false;
+ }
  else if(s=="porn"||s=="порн"||s=="ПОРН"){returnMode=mode;mode=PORN_MODE;secretTimer=60*12;pornImage=rand()%2;audio.play("romfs:/audio/voice_porn.mp3");}
 }
 
@@ -222,7 +229,7 @@ static void drawCharSelect(){
 }
 static void drawSettings(){
  C2D_TargetClear(topTarget,BG);drawText(18,18,0.72f,ACCENT,"OPTIONS");const char* names[]={"TETRIS LAYOUT","PIECE FALL MODE","BACK"}; for(int i=0;i<3;i++){if(i==settingsIndex)C2D_DrawRectSolid(15,70+i*48,0.2f,370,38,C2D_Color32(85,40,115,230));drawText(25,77+i*48,0.52f,i==settingsIndex?WHITE:DIM,"%s",names[i]); if(i==0)drawText(230,77+i*48,0.5f,ACCENT,"%s",dualScreen?"DUAL SCREEN":"COMPACT");if(i==1)drawText(230,77+i*48,0.5f,ACCENT,"%s",phobosFall?"PHOBOS":"CLASSIC");}
- C2D_TargetClear(botTarget,C2D_Color32(14,8,25,255));C2D_SceneBegin(botTarget);centerText(160,35,0.52f,WHITE,"A / LEFT / RIGHT: change");centerText(160,78,0.42f,DIM,"DUAL: 10 rows top + 10 rows bottom");centerText(160,105,0.42f,DIM,"24 px cells, centered on both screens");centerText(160,180,0.4f,DIM,"B: back");
+ C2D_TargetClear(botTarget,C2D_Color32(14,8,25,255));C2D_SceneBegin(botTarget);centerText(160,35,0.52f,WHITE,"A / LEFT / RIGHT: change");centerText(160,78,0.42f,DIM,"DUAL: 10 rows top + 10 rows bottom");centerText(160,105,0.42f,DIM,"24 px cells, centered on both screens");centerText(160,135,0.4f,ACCENT,"In game: A + B toggles layout");centerText(160,190,0.4f,DIM,"B: back");
 }
 static void drawGame(){
  C2D_TargetClear(topTarget,BG);
@@ -278,8 +285,8 @@ static void drawCutscene(){
 }
 static void drawWinner(){C2D_TargetClear(topTarget,BG);endingHeart.drawFit(130,10,140,110);centerText(200,125,0.68f,ACCENT,"WHO WINS?");centerText(200,170,0.52f,WHITE,guardiansRoute?"< GUARDIANS >":phobosRoute?"< PHOBOS >":"LEFT: GUARDIANS   RIGHT: PHOBOS");C2D_TargetClear(botTarget,BG);C2D_SceneBegin(botTarget);centerText(160,80,0.48f,WHITE,"LEFT / RIGHT choose");centerText(160,125,0.48f,WHITE,"A confirm");}
 static void drawRoom(){C2D_TargetClear(topTarget,BG);roomBg.drawCover(0,0,400,240);roomPoses[roomPose].drawFit(225,18,165,215,0.3f);roomFg.drawFit(0,0,400,240,0.6f);C2D_TargetClear(botTarget,C2D_Color32(15,6,20,255));C2D_SceneBegin(botTarget);centerText(160,20,0.58f,ACCENT,"PHOBOS ROOM");centerText(160,72,0.34f,WHITE,roomLines[roomLine%ROOM_LINE_COUNT]);centerText(160,125,0.38f,DIM,"A: next line     X: pose");centerText(160,157,0.36f,DIM,"Выхода в меню здесь нет.");centerText(160,185,0.34f,DIM,"Только закрытие программы.");}
-static void drawMatrix(){C2D_TargetClear(topTarget,C2D_Color32(0,0,0,255));for(int i=0;i<80;i++){float x=(rand()%400),y=(rand()%240);C2D_DrawRectSolid(x,y,0.2f,2,4+(rand()%16),C2D_Color32(0,100+rand()%155,20,180));}centerText(200,95,0.8f,GREEN,"MATRIX");C2D_TargetClear(botTarget,C2D_Color32(0,0,0,255));C2D_SceneBegin(botTarget);centerText(160,95,0.45f,GREEN,"A / B: return safely");}
-static void drawVTD(){C2D_TargetClear(topTarget,BG);vtdObs.drawFit(0,0,400,240);C2D_TargetClear(botTarget,C2D_Color32(10,5,20,255));C2D_SceneBegin(botTarget);centerText(160,70,0.58f,ACCENT,"VTD / VALENTIN");centerText(160,115,0.43f,WHITE,"L + R: exit VTD -> classic");}
+static void drawMatrix(){C2D_TargetClear(topTarget,C2D_Color32(0,0,0,255));for(int i=0;i<80;i++){float x=(rand()%400),y=(rand()%240);C2D_DrawRectSolid(x,y,0.2f,2,4+(rand()%16),C2D_Color32(0,100+rand()%155,20,180));}centerText(200,95,0.8f,GREEN,"MATRIX");C2D_TargetClear(botTarget,C2D_Color32(0,0,0,255));C2D_SceneBegin(botTarget);centerText(160,95,0.45f,GREEN,"A / B: close game now");}
+static void drawVTD(){C2D_TargetClear(topTarget,BG);vtdObs.drawFit(0,0,400,240);C2D_TargetClear(botTarget,C2D_Color32(10,5,20,255));C2D_SceneBegin(botTarget);centerText(160,70,0.58f,ACCENT,"VTD / VALENTIN");centerText(160,115,0.43f,WHITE,"The game closes when the track ends");centerText(160,145,0.38f,DIM,"L + R: close now");}
 static void drawPorn(){C2D_TargetClear(topTarget,C2D_Color32(32,8,24,255));pornArts[pornImage%2].drawFit(8,8,205,224,0.2f);phobosMenu.drawFit(238,18,152,205,0.3f);drawText(218,25,0.50f,ACCENT,"PORN");drawText(214,176,0.31f,WHITE,"Ну зачем ты ввёл");drawText(214,197,0.31f,WHITE,"код порно?");C2D_TargetClear(botTarget,C2D_Color32(16,5,14,255));C2D_SceneBegin(botTarget);centerText(160,75,0.46f,WHITE,"Случайная картинка + реакция Фобоса");centerText(160,125,0.44f,DIM,"A / B: return");}
 
 static void render(){
@@ -314,18 +321,24 @@ static void handleInput(u32 kd,u32 kh,touchPosition tp){
    }
    return;
   }
-  if(kd&(KEY_START|KEY_SELECT)){paused=true;pauseIndex=0;audio.setPause(true);return;}if(kd&KEY_LEFT&&fits(curType,curRot,curX-1,curY))curX--;if(kd&KEY_RIGHT&&fits(curType,curRot,curX+1,curY))curX++;if(kh&KEY_DOWN&&frameCounter%3==0){if(fits(curType,curRot,curX,curY+1))curY++;else lockPiece();}if(kd&(KEY_A|KEY_B|KEY_UP)){int nr=(curRot+1)&3;if(fits(curType,nr,curX,curY))curRot=nr;}if(kd&KEY_Y)hardDrop();if(kd&KEY_X)hold();if(kd&(KEY_L|KEY_R))music.playNext();return;
+  if(kd&(KEY_START|KEY_SELECT)){paused=true;pauseIndex=0;audio.setPause(true);return;}
+  const bool abChord=((kh&(KEY_A|KEY_B))==(KEY_A|KEY_B))&&(kd&(KEY_A|KEY_B));
+  if(abChord){dualScreen=!dualScreen;saveSettings();return;}
+  if(kd&KEY_LEFT&&fits(curType,curRot,curX-1,curY))curX--;if(kd&KEY_RIGHT&&fits(curType,curRot,curX+1,curY))curX++;if(kh&KEY_DOWN&&frameCounter%3==0){if(fits(curType,curRot,curX,curY+1))curY++;else lockPiece();}if(kd&(KEY_A|KEY_B|KEY_UP)){int nr=(curRot+1)&3;if(fits(curType,nr,curX,curY))curRot=nr;}if(kd&KEY_Y)hardDrop();if(kd&KEY_X)hold();if(kd&(KEY_L|KEY_R))music.playNext();return;
  }
  if(mode==CUTSCENE){if(kd&(KEY_A|KEY_TOUCH)){if(cutsceneStage==100){mode=GAME;music.start(2);}else mode=MENU;}if(kd&(KEY_B|KEY_START)){mode=(cutsceneStage==100)?GAME:MENU;if(mode==GAME)music.start(2);else music.start(0);}return;}
  if(mode==WINNER){if(kd&KEY_LEFT){guardiansRoute=true;phobosRoute=false;}if(kd&KEY_RIGHT){phobosRoute=true;guardiansRoute=false;}if((kd&KEY_A)&&(guardiansRoute||phobosRoute)){mode=GAME;music.start(guardiansRoute?3:4);}return;}
  if(mode==PHOBOS_ROOM){if(kd&KEY_X)roomPose=(roomPose+1)%6;if(kd&KEY_A){roomPose=(roomPose+1)%6;roomLine=(roomLine+1+rand()%3)%ROOM_LINE_COUNT;}return;}
- if(mode==MATRIX_MODE||mode==PORN_MODE){if(kd&(KEY_A|KEY_B|KEY_START)){mode=returnMode;music.playNext();}return;}
- if(mode==VTD_MODE){if(((kh&KEY_L)&&(kh&KEY_R))||(kd&KEY_START)){mode=returnMode;music.playNext();}return;}
+ if(mode==MATRIX_MODE){if(kd&(KEY_A|KEY_B|KEY_START))running=false;return;}
+ if(mode==PORN_MODE){if(kd&(KEY_A|KEY_B|KEY_START)){mode=returnMode;music.playNext();}return;}
+ if(mode==VTD_MODE){if(((kh&KEY_L)&&(kh&KEY_R))||(kd&KEY_START))running=false;return;}
 }
 
 static void update(){
  frameCounter++; music.update();
- if((mode==MATRIX_MODE||mode==PORN_MODE)&&secretTimer>0){secretTimer--;if(secretTimer==0){mode=returnMode;music.playNext();}}
+ if(mode==MATRIX_MODE&&secretTimer>0){secretTimer--;if(secretTimer==0)running=false;}
+ if(mode==PORN_MODE&&secretTimer>0){secretTimer--;if(secretTimer==0){mode=returnMode;music.playNext();}}
+ if(mode==VTD_MODE&&audio.finished)running=false;
  if(mode==GAME&&!paused&&!gameOver&&frameCounter%(std::max(8,35-level*2))==0){if(fits(curType,curRot,curX,curY+1))curY++;else lockPiece();}
 }
 
