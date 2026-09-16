@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - chatgpt/3ds-fixes-rc1
+      - codex/port-base-20260916
     paths:
       - 'native3ds/**'
       - '.github/workflows/build-native-rc1.yml'
