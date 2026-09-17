@@ -1,4 +1,4 @@
-name: Build Native 3DS Story Test 9
+name: Build Native 3DS Story Test 10
 
 on:
   push:
@@ -156,6 +156,67 @@ jobs:
           test -s native3ds/romfs/gfx/bg_phase1.t3x
           test -s native3ds/romfs/gfx/bg_phase2.t3x
 
+      - name: Rebuild every rotating cell from the original Python sprites
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -eux
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          import pygame
+
+          pygame.init()
+          pygame.display.set_mode((1, 1))
+          kinds = ["I", "O", "T", "S", "Z", "J", "L"]
+          meta = json.loads(Path("assets/sprites/phase1/phase1_atlas.json").read_text())
+          shapes = meta["shapes"]
+          cell = int(meta["cell_size"])
+          assert cell == 24
+
+          for family in ("phase1", "horror"):
+              output = Path("/tmp") / f"{family}_cells"
+              output.mkdir(parents=True, exist_ok=True)
+              manifest = ["--atlas -f rgba8888 -z auto"]
+              index = 0
+              for kind in kinds:
+                  for rotation in range(4):
+                      coords = shapes[kind][str(rotation)]
+                      width = (max(x for x, _ in coords) + 1) * cell
+                      height = (max(y for _, y in coords) + 1) * cell
+                      source = pygame.image.load(
+                          f"assets/sprites/{family}/{kind}_rotation_{rotation * 90}.png"
+                      ).convert_alpha()
+                      source = pygame.transform.smoothscale(source, (width, height))
+                      for x, y in coords:
+                          tile = pygame.Surface((cell, cell), pygame.SRCALPHA, 32)
+                          tile.blit(source, (0, 0), pygame.Rect(x * cell, y * cell, cell, cell))
+                          name = f"{index:03d}.png"
+                          pygame.image.save(tile, str(output / name))
+                          manifest.append(name)
+                          index += 1
+              assert index == 112
+              (output / "images.t3s").write_text("\n".join(manifest) + "\n")
+          pygame.quit()
+          PY
+          (cd /tmp/phase1_cells && tex3ds -i images.t3s -o "$GITHUB_WORKSPACE/native3ds/romfs/gfx/phase1_cells.t3x")
+          (cd /tmp/horror_cells && tex3ds -i images.t3s -o "$GITHUB_WORKSPACE/native3ds/romfs/gfx/horror_cells.t3x")
+          test "$(find /tmp/phase1_cells -name '*.png' | wc -l)" -eq 112
+          test "$(find /tmp/horror_cells -name '*.png' | wc -l)" -eq 112
+          test -s native3ds/romfs/gfx/phase1_cells.t3x
+          test -s native3ds/romfs/gfx/horror_cells.t3x
+
+      - name: Add Meridian Control System surprise masks
+        shell: bash
+        run: |
+          set -eux
+          tex3ds assets/cutscenes/lines100/heart_kandrakar_mask.png -f rgba8888 -z auto -o native3ds/romfs/gfx/terminal_heart_mask.t3x
+          tex3ds assets/cutscenes/lines100/jetix_mask.png -f rgba8888 -z auto -o native3ds/romfs/gfx/terminal_jetix_mask.t3x
+          test -s native3ds/romfs/gfx/terminal_heart_mask.t3x
+          test -s native3ds/romfs/gfx/terminal_jetix_mask.t3x
+
       - name: Restore Python voice ownership and Phobos reactions
         shell: bash
         run: |
@@ -294,16 +355,16 @@ jobs:
           cp witch_tetris_3ds.smdh native3ds/witch_tetris_3ds_rc2.smdh
           cd native3ds
           make -j"$(nproc)"
-          cp witch_tetris_3ds_rc2.3dsx WITCH_Tetris_3DS_Story_Test_9.3dsx
+          cp witch_tetris_3ds_rc2.3dsx WITCH_Tetris_3DS_Story_Test_10.3dsx
           ls -lh witch_tetris_3ds_rc2.3dsx
           test -s witch_tetris_3ds_rc2.3dsx
 
       - name: Upload native RC2
         uses: actions/upload-artifact@v4
         with:
-          name: witch-tetris-3ds-story-test-9-native
+          name: witch-tetris-3ds-story-test-10-native
           path: |
-            native3ds/WITCH_Tetris_3DS_Story_Test_9.3dsx
+            native3ds/WITCH_Tetris_3DS_Story_Test_10.3dsx
             native3ds/witch_tetris_3ds_rc2.map
             native3ds/source/main.cpp
             witch_tetris_3ds.smdh
@@ -318,7 +379,7 @@ jobs:
       - name: Download native RC2
         uses: actions/download-artifact@v4
         with:
-          name: witch-tetris-3ds-story-test-9-native
+          name: witch-tetris-3ds-story-test-10-native
           path: package
 
       - name: Install packaging dependencies
@@ -351,21 +412,21 @@ jobs:
         run: |
           set -euxo pipefail
           find package -maxdepth 4 -type f -ls
-          DSX="$(find package -type f -name WITCH_Tetris_3DS_Story_Test_9.3dsx | head -1)"
+          DSX="$(find package -type f -name WITCH_Tetris_3DS_Story_Test_10.3dsx | head -1)"
           SMDH="$(find package -type f -name witch_tetris_3ds.smdh | head -1)"
           test -n "$DSX"
           test -n "$SMDH"
           ./cxitool -n WTetris -c CTR-H-WTTR -t 000400000FCA3D00 "$DSX" witch_tetris_3ds_rc3.cxi
-          ./makerom -f cia -o WITCH_Tetris_3DS_Story_Test_9.cia -target t -i witch_tetris_3ds_rc3.cxi:0:0 -ignoresign -icon "$SMDH"
-          sha256sum WITCH_Tetris_3DS_Story_Test_9.cia | tee WITCH_Tetris_3DS_Story_Test_9.cia.sha256
-          ls -lh WITCH_Tetris_3DS_Story_Test_9.cia
+          ./makerom -f cia -o WITCH_Tetris_3DS_Story_Test_10.cia -target t -i witch_tetris_3ds_rc3.cxi:0:0 -ignoresign -icon "$SMDH"
+          sha256sum WITCH_Tetris_3DS_Story_Test_10.cia | tee WITCH_Tetris_3DS_Story_Test_10.cia.sha256
+          ls -lh WITCH_Tetris_3DS_Story_Test_10.cia
 
       - name: Upload final RC2
         uses: actions/upload-artifact@v4
         with:
-          name: witch-tetris-3ds-story-test-9-final
+          name: witch-tetris-3ds-story-test-10-final
           path: |
-            WITCH_Tetris_3DS_Story_Test_9.cia
-            WITCH_Tetris_3DS_Story_Test_9.cia.sha256
+            WITCH_Tetris_3DS_Story_Test_10.cia
+            WITCH_Tetris_3DS_Story_Test_10.cia.sha256
           compression-level: 0
           retention-days: 7
