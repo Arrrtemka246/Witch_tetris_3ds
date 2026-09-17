@@ -213,25 +213,37 @@ static constexpr int ROOM_LINE_COUNT=sizeof(roomLines)/sizeof(roomLines[0]);
 static void saveSettings(){ mkdir("sdmc:/3ds",0777);mkdir("sdmc:/3ds/WitchTetris",0777);FILE* f=fopen("sdmc:/3ds/WitchTetris/settings.cfg","w");if(f){fprintf(f,"dual=%d\nphobosfall=%d\nphobos=%d\n",dualScreen?1:0,phobosFall?1:0,phobosEnabled?1:0);for(int i=0;i<7;i++)fprintf(f,"piece%d=%d\n",i,pieceEnabled[i]?1:0);fclose(f);} }
 static void loadSettings(){FILE* f=fopen("sdmc:/3ds/WitchTetris/settings.cfg","r");if(!f)return;char k[64];int v;while(fscanf(f,"%63[^=]=%d\n",k,&v)==2){if(!strcmp(k,"dual"))dualScreen=v;if(!strcmp(k,"phobosfall"))phobosFall=v;if(!strcmp(k,"phobos"))phobosEnabled=v;for(int i=0;i<7;i++){char p[16];snprintf(p,sizeof(p),"piece%d",i);if(!strcmp(k,p))pieceEnabled[i]=v;}}fclose(f);}
 
+// Exact geometry from the Python original. Every clockwise rotation is
+// normalised to the top-left corner of its own bounding box; rotating in a
+// fixed 4x4 box makes the logical cells drift away from their sprite slices.
 static const int baseShape[7][4][2]={
- {{0,1},{1,1},{2,1},{3,1}},{{1,0},{2,0},{1,1},{2,1}},{{1,0},{0,1},{1,1},{2,1}},
- {{1,0},{2,0},{0,1},{1,1}},{{0,0},{1,0},{1,1},{2,1}},{{0,0},{0,1},{1,1},{2,1}},{{2,0},{0,1},{1,1},{2,1}}
+ {{0,0},{0,1},{0,2},{0,3}},{{0,0},{1,0},{0,1},{1,1}},{{0,0},{1,0},{2,0},{1,1}},
+ {{0,0},{1,0},{1,1},{2,1}},{{1,0},{2,0},{0,1},{1,1}},{{0,0},{0,1},{1,1},{2,1}},{{2,0},{0,1},{1,1},{2,1}}
 };
-static void blockPos(int t,int r,int i,int& x,int& y){x=baseShape[t][i][0];y=baseShape[t][i][1];if(t==1)return;for(int k=0;k<r;k++){int nx=3-y,ny=x;x=nx;y=ny;}}
+static int shapePos[7][4][4][2];
+static bool shapesReady=false;
+static void initShapes(){
+ if(shapesReady)return;
+ for(int t=0;t<7;t++){
+  for(int i=0;i<4;i++){shapePos[t][0][i][0]=baseShape[t][i][0];shapePos[t][0][i][1]=baseShape[t][i][1];}
+  for(int r=1;r<4;r++){
+   int maxY=0,minX=99,minY=99;
+   for(int i=0;i<4;i++)maxY=std::max(maxY,shapePos[t][r-1][i][1]);
+   int h=maxY+1;
+   for(int i=0;i<4;i++){int px=shapePos[t][r-1][i][0],py=shapePos[t][r-1][i][1];shapePos[t][r][i][0]=h-1-py;shapePos[t][r][i][1]=px;minX=std::min(minX,shapePos[t][r][i][0]);minY=std::min(minY,shapePos[t][r][i][1]);}
+   for(int i=0;i<4;i++){shapePos[t][r][i][0]-=minX;shapePos[t][r][i][1]-=minY;}
+  }
+ }
+ shapesReady=true;
+}
+static void blockPos(int t,int r,int i,int& x,int& y){initShapes();x=shapePos[t][r&3][i][0];y=shapePos[t][r&3][i][1];}
 static bool fits(int t,int r,int px,int py){for(int i=0;i<4;i++){int x,y;blockPos(t,r,i,x,y);x+=px;y+=py;if(x<0||x>=BW||y>=BH)return false;if(y>=0&&board[y][x])return false;}return true;}
 static int nextBag(){if(bagPos>=bagCount){bagCount=0;for(int i=0;i<7;i++)if(pieceEnabled[i])bag[bagCount++]=i;if(!bagCount){pieceEnabled[2]=true;bag[0]=2;bagCount=1;}for(int i=bagCount-1;i>0;i--){int j=rand()%(i+1);std::swap(bag[i],bag[j]);}bagPos=0;}return bag[bagPos++];}
 static int nextPiece(){if(!phobosFall)return nextBag();if(rand()%100<45){int enabled[7],n=0;for(int i=0;i<7;i++)if(pieceEnabled[i])enabled[n++]=i;if(n)return enabled[rand()%n];}return nextBag();}
 
-// The supplied atlas order is I,O,T,S,Z,J,L; S/Z are opposite to baseShape.
-static int spriteIndex(int t,int r,int i){
- int at=t,sr=r,ci=i;
- if(t==0)sr=(r+3)&3;
- else if(t==1){static const int om[4][4]={{0,1,2,3},{2,0,3,1},{3,2,1,0},{1,3,0,2}};ci=om[r&3][i];}
- else if(t==2){sr=(r+2)&3;ci=3-i;}
- else if(t==3)at=4;
- else if(t==4)at=3;
- return at*16+sr*4+ci;
-}
+// The atlases were cut by iterating Python's SHAPES[kind][rotation] lists.
+// With the same geometry and cell order there is no per-piece remapping.
+static int spriteIndex(int t,int r,int i){return t*16+(r&3)*4+i;}
 static int encodeCell(int t,int r,int i,bool horror){return ((t+1)<<8)|(spriteIndex(t,r,i)+1)|(horror?0x10000:0);}
 static int cellType(int code){return code<0?(-code-1):(((code>>8)&255)-1);}
 static u32 pieceColor(int t){static u32 c[7]={C2D_Color32(80,220,255,255),C2D_Color32(255,220,70,255),C2D_Color32(190,90,255,255),C2D_Color32(80,240,130,255),C2D_Color32(255,80,100,255),C2D_Color32(80,110,255,255),C2D_Color32(255,145,60,255)};return c[(t<0?0:t)%7];}
@@ -260,7 +272,7 @@ static void drawSpriteCell(int idx,bool horror,float x,float y,float cell,float 
 static void drawBoardSlice(float x0,float y0,float cell,int yStart,int count){
  float frameX=x0+stereoX(0.24f),glassX=x0+stereoX(0.31f);
  C2D_DrawRectSolid(frameX-2,y0-2,0.24f,BW*cell+4,count*cell+4,C2D_Color32(105,62,145,235));
- C2D_DrawRectSolid(glassX,y0,0.31f,BW*cell,count*cell,C2D_Color32(8,5,18,38));
+ // No board fill: the castle remains fully visible through the glass.
  u32 grid=C2D_Color32(210,175,245,78);
  for(int x=0;x<=BW;x++)C2D_DrawRectSolid(glassX+x*cell,y0,0.34f,1,count*cell,grid);
  for(int y=0;y<=count;y++)C2D_DrawRectSolid(glassX,y0+y*cell,0.34f,BW*cell,1,grid);
@@ -341,7 +353,7 @@ static void drawBoot(){
  C2D_TargetClear(botTarget,C2D_Color32(0,0,0,255));beginBottom();centerText(160,96,0.52f,DIM,"PRESS ANY KEY");centerText(160,132,0.38f,DIM,"TO CONTINUE");
 }
 
-static void drawMenu(){bgMenu.drawCover(0,0,TOP_W,H,0.08f);C2D_DrawRectSolid(stereoX(0.18f),0,0.18f,TOP_W,H,C2D_Color32(0,0,0,90));if(phobosEnabled)phobosMenu.drawFit(250,18,145,216,0.86f);drawText(18,20,0.72f,ACCENT,"W.I.T.C.H. TETRIS 3DS");drawText(20,48,0.43f,WHITE,"NATIVE STORY TEST 5");const char* items[]={"NEW GAME","CUTSCENES","SETTINGS","EXIT"};for(int i=0;i<4;i++){if(i==menuIndex)C2D_DrawRectSolid(18+stereoX(0.62f),82+i*34,0.62f,205,28,C2D_Color32(95,45,120,220));drawText(28,85+i*34,0.55f,i==menuIndex?WHITE:DIM,"> %s",items[i]);}C2D_TargetClear(botTarget,BG);beginBottom();centerText(160,25,0.6f,ACCENT,"MAIN MENU");centerText(160,70,0.45f,WHITE,"D-Pad: select   A: open");centerText(160,105,0.39f,DIM,"Character choice unlocks at 200 lines");centerText(160,185,0.4f,DIM,"START: exit");}
+static void drawMenu(){bgMenu.drawCover(0,0,TOP_W,H,0.08f);C2D_DrawRectSolid(stereoX(0.18f),0,0.18f,TOP_W,H,C2D_Color32(0,0,0,90));if(phobosEnabled)phobosMenu.drawFit(250,18,145,216,0.86f);drawText(18,20,0.72f,ACCENT,"W.I.T.C.H. TETRIS 3DS");drawText(20,48,0.43f,WHITE,"NATIVE STORY TEST 6");const char* items[]={"NEW GAME","CUTSCENES","SETTINGS","EXIT"};for(int i=0;i<4;i++){if(i==menuIndex)C2D_DrawRectSolid(18+stereoX(0.62f),82+i*34,0.62f,205,28,C2D_Color32(95,45,120,220));drawText(28,85+i*34,0.55f,i==menuIndex?WHITE:DIM,"> %s",items[i]);}C2D_TargetClear(botTarget,BG);beginBottom();centerText(160,25,0.6f,ACCENT,"MAIN MENU");centerText(160,70,0.45f,WHITE,"D-Pad: select   A: open");centerText(160,105,0.39f,DIM,"Character choice unlocks at 200 lines");centerText(160,185,0.4f,DIM,"START: exit");}
 static void drawGallery(){drawText(18,18,0.72f,ACCENT,"CUTSCENES");const char* items[]={"INTRO","100 LINES","200 LINES","GUARDIANS ENDING","BACK"};for(int i=0;i<5;i++){if(i==galleryIndex)C2D_DrawRectSolid(20,62+i*34,0.2f,360,28,C2D_Color32(85,40,115,230));drawText(30,65+i*34,0.5f,i==galleryIndex?WHITE:DIM,"%s",items[i]);}C2D_TargetClear(botTarget,BG);beginBottom();centerText(160,70,0.5f,WHITE,"A: play");centerText(160,115,0.42f,DIM,"B: main menu");}
 static void drawSettings(){drawText(18,18,0.72f,ACCENT,settingsRoster?"FIGURES / PHOBOS":"OPTIONS");if(!settingsRoster){const char* names[]={"TETRIS LAYOUT","PIECE FALL MODE","FIGURE ROSTER","BACK"};for(int i=0;i<4;i++){if(i==settingsIndex)C2D_DrawRectSolid(15+stereoX(0.54f),62+i*42,0.54f,370,34,C2D_Color32(85,40,115,230));drawText(25,68+i*42,0.49f,i==settingsIndex?WHITE:DIM,"%s",names[i]);if(i==0)drawText(245,68+i*42,0.44f,ACCENT,"%s",dualScreen?"DUAL":"COMPACT");if(i==1)drawText(245,68+i*42,0.44f,ACCENT,"%s",phobosFall?"PHOBOS":"CLASSIC");}}else{const char* rn[]={"I  CORNELIA","O  BLUNK","T  CALEB","S  IRMA","Z  WILL","J  TARANEE","L  HAY LIN","PHOBOS","BACK"};for(int i=0;i<9;i++){float y=44+i*21;if(i==settingsIndex)C2D_DrawRectSolid(16+stereoX(0.54f),y-2,0.54f,368,20,C2D_Color32(85,40,115,230));drawText(25,y,0.37f,i==settingsIndex?WHITE:DIM,"%s",rn[i]);if(i<8)drawText(310,y,0.35f,(i<7?pieceEnabled[i]:phobosEnabled)?GREEN:RED,(i<7?pieceEnabled[i]:phobosEnabled)?"ON":"OFF");}}C2D_TargetClear(botTarget,C2D_Color32(14,8,25,255));beginBottom();centerText(160,35,0.52f,WHITE,"A / LEFT / RIGHT: change");centerText(160,82,0.42f,DIM,settingsRoster?"Every figure can be disabled":"DUAL: 10 rows top + 10 bottom");centerText(160,135,0.4f,ACCENT,settingsRoster?"At least one figure remains active":"In game: A + B toggles");centerText(160,190,0.4f,DIM,"B: back");}
 
