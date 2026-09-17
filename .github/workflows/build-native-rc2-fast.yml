@@ -1,4 +1,4 @@
-name: Build Native 3DS RC2 Fast
+name: Build Native 3DS Story Test 9
 
 on:
   push:
@@ -142,6 +142,49 @@ jobs:
           test -f native3ds/romfs/gfx/bg_menu.t3x
           test -f native3ds/romfs/audio/menu_1.mp3
 
+      - name: Replace baked playfields with clean castle backgrounds
+        shell: bash
+        run: |
+          set -eux
+          convert assets/backgrounds/phase_0_99_throne.png -resize '400x240^' -gravity center -extent 400x240 /tmp/bg_phase0.png
+          convert assets/backgrounds/phase_100_199_unstable.png -resize '400x240^' -gravity center -extent 400x240 /tmp/bg_phase1.png
+          convert assets/backgrounds/phase_200_plus_liberated.png -resize '400x240^' -gravity center -extent 400x240 /tmp/bg_phase2.png
+          tex3ds /tmp/bg_phase0.png -f rgb565 -z auto -o native3ds/romfs/gfx/bg_phase0.t3x
+          tex3ds /tmp/bg_phase1.png -f rgb565 -z auto -o native3ds/romfs/gfx/bg_phase1.t3x
+          tex3ds /tmp/bg_phase2.png -f rgb565 -z auto -o native3ds/romfs/gfx/bg_phase2.t3x
+          test -s native3ds/romfs/gfx/bg_phase0.t3x
+          test -s native3ds/romfs/gfx/bg_phase1.t3x
+          test -s native3ds/romfs/gfx/bg_phase2.t3x
+
+      - name: Restore Python voice ownership and Phobos reactions
+        shell: bash
+        run: |
+          set -eux
+          encode_voice() { ffmpeg -y -loglevel error -i "$1" -codec:a libmp3lame -b:a 96k "$2"; }
+          for n in 1 2 3; do
+            encode_voice "assets/audio/voice/guardians/cornelia/earth_${n}.wav" "native3ds/romfs/audio/react_earth_${n}.mp3"
+            encode_voice "assets/audio/voice/guardians/irma/water_${n}.wav" "native3ds/romfs/audio/react_water_${n}.mp3"
+            encode_voice "assets/audio/voice/guardians/taranee/fire_${n}.wav" "native3ds/romfs/audio/react_fire_${n}.mp3"
+            encode_voice "assets/audio/voice/guardians/haylin/air_${n}.wav" "native3ds/romfs/audio/react_air_${n}.mp3"
+            encode_voice "assets/audio/sfx/phobos_laughs/laugh_${n}.wav" "native3ds/romfs/audio/react_phobos_tetris_${n}.mp3"
+          done
+          encode_voice assets/audio/voice/caleb/im_15.wav native3ds/romfs/audio/react_caleb_clear.mp3
+          blunk_one=(businessman laugh groan fight)
+          for i in 0 1 2 3; do encode_voice "assets/audio/voice/blunk/${blunk_one[$i]}.wav" "native3ds/romfs/audio/react_blunk_one_$((i+1)).mp3"; done
+          blunk_two=(also_warrior treasure not_afraid)
+          for i in 0 1 2; do encode_voice "assets/audio/voice/blunk/${blunk_two[$i]}.wav" "native3ds/romfs/audio/react_blunk_two_$((i+1)).mp3"; done
+          encode_voice assets/audio/voice/phobos/meridian_mine.mp3 native3ds/romfs/audio/react_phobos_start_0.mp3
+          encode_voice assets/audio/voice/phobos/dark_side.mp3 native3ds/romfs/audio/react_phobos_start_1.mp3
+          encode_voice assets/audio/voice/phobos/extra/lets_begin.wav native3ds/romfs/audio/react_phobos_start_2.mp3
+          encode_voice assets/audio/voice/phobos/extra2/your_power_is_nothing.wav native3ds/romfs/audio/react_phobos_start_3.mp3
+          encode_voice assets/audio/voice/phobos/extra2/last_hope_universe.wav native3ds/romfs/audio/react_phobos_start_4.mp3
+          encode_voice assets/audio/voice/phobos/extra2/new_era_phobos.wav native3ds/romfs/audio/react_phobos_start_5.mp3
+          encode_voice assets/audio/voice/phobos/extra2/destroy_weak_link.wav native3ds/romfs/audio/react_destroy_weak.mp3
+          encode_voice assets/audio/voice/phobos/not_bad.mp3 native3ds/romfs/audio/react_tetris_not_bad.mp3
+          test -s native3ds/romfs/audio/react_earth_3.mp3
+          test -s native3ds/romfs/audio/react_blunk_two_3.mp3
+          test -s native3ds/romfs/audio/react_phobos_start_5.mp3
+
       - name: Add PORN-code gallery cards
         shell: bash
         run: |
@@ -218,8 +261,8 @@ jobs:
           ending = Ending()
           dummy = pygame.Surface((16, 16))
           output = Path("/tmp/ending_frames")
-          fps = 6
-          count = 172
+          fps = 15
+          count = 430
           for index in range(count):
               ending.draw(dummy, t=index / fps)
               frame = pygame.transform.smoothscale(ending.stage, (400, 225))
@@ -235,11 +278,11 @@ jobs:
             tex3ds "$frame" -f rgb565 -z auto -o "$output"
             ending_index=$((ending_index + 1))
           done
-          test "$ending_index" -eq 172
+          test "$ending_index" -eq 430
           ffmpeg -y -loglevel error -i assets/audio/music/ending/witch_end_outro.mp3 -codec:a libmp3lame -b:a 96k native3ds/romfs/video/ending.mp3
           ffmpeg -y -loglevel error -i assets/audio/voice/route_story/guardians/will_reverse.wav -codec:a libmp3lame -b:a 96k native3ds/romfs/audio/will_reverse.mp3
           ffmpeg -y -loglevel error -i assets/audio/voice/route_story/phobos/phobos_r.wav -codec:a libmp3lame -b:a 96k native3ds/romfs/audio/phobos_reverse.mp3
-          test -s native3ds/romfs/video/ending/ending_171.t3x
+          test -s native3ds/romfs/video/ending/ending_429.t3x
           test -s native3ds/romfs/video/ending.mp3
           test -s native3ds/romfs/audio/will_reverse.mp3
           test -s native3ds/romfs/audio/phobos_reverse.mp3
@@ -251,20 +294,21 @@ jobs:
           cp witch_tetris_3ds.smdh native3ds/witch_tetris_3ds_rc2.smdh
           cd native3ds
           make -j"$(nproc)"
+          cp witch_tetris_3ds_rc2.3dsx WITCH_Tetris_3DS_Story_Test_9.3dsx
           ls -lh witch_tetris_3ds_rc2.3dsx
           test -s witch_tetris_3ds_rc2.3dsx
 
       - name: Upload native RC2
         uses: actions/upload-artifact@v4
         with:
-          name: witch-tetris-3ds-rc3-native
+          name: witch-tetris-3ds-story-test-9-native
           path: |
-            native3ds/witch_tetris_3ds_rc2.3dsx
+            native3ds/WITCH_Tetris_3DS_Story_Test_9.3dsx
             native3ds/witch_tetris_3ds_rc2.map
             native3ds/source/main.cpp
             witch_tetris_3ds.smdh
           compression-level: 0
-          retention-days: 1
+          retention-days: 7
 
   package-cia:
     needs: build-native
@@ -274,7 +318,7 @@ jobs:
       - name: Download native RC2
         uses: actions/download-artifact@v4
         with:
-          name: witch-tetris-3ds-rc3-native
+          name: witch-tetris-3ds-story-test-9-native
           path: package
 
       - name: Install packaging dependencies
@@ -307,21 +351,21 @@ jobs:
         run: |
           set -euxo pipefail
           find package -maxdepth 4 -type f -ls
-          DSX="$(find package -type f -name witch_tetris_3ds_rc2.3dsx | head -1)"
+          DSX="$(find package -type f -name WITCH_Tetris_3DS_Story_Test_9.3dsx | head -1)"
           SMDH="$(find package -type f -name witch_tetris_3ds.smdh | head -1)"
           test -n "$DSX"
           test -n "$SMDH"
           ./cxitool -n WTetris -c CTR-H-WTTR -t 000400000FCA3D00 "$DSX" witch_tetris_3ds_rc3.cxi
-          ./makerom -f cia -o Witch_Tetris_3DS_RC3.cia -target t -i witch_tetris_3ds_rc3.cxi:0:0 -ignoresign -icon "$SMDH"
-          sha256sum Witch_Tetris_3DS_RC3.cia | tee Witch_Tetris_3DS_RC3.cia.sha256
-          ls -lh Witch_Tetris_3DS_RC3.cia
+          ./makerom -f cia -o WITCH_Tetris_3DS_Story_Test_9.cia -target t -i witch_tetris_3ds_rc3.cxi:0:0 -ignoresign -icon "$SMDH"
+          sha256sum WITCH_Tetris_3DS_Story_Test_9.cia | tee WITCH_Tetris_3DS_Story_Test_9.cia.sha256
+          ls -lh WITCH_Tetris_3DS_Story_Test_9.cia
 
       - name: Upload final RC2
         uses: actions/upload-artifact@v4
         with:
-          name: witch-tetris-3ds-rc3-final
+          name: witch-tetris-3ds-story-test-9-final
           path: |
-            Witch_Tetris_3DS_RC3.cia
-            Witch_Tetris_3DS_RC3.cia.sha256
+            WITCH_Tetris_3DS_Story_Test_9.cia
+            WITCH_Tetris_3DS_Story_Test_9.cia.sha256
           compression-level: 0
           retention-days: 7
