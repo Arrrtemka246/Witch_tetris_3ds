@@ -65,7 +65,7 @@ jobs:
         run: |
           set -eux
           apt-get update
-          apt-get install -y curl bzip2 make imagemagick ffmpeg
+          apt-get install -y curl bzip2 make imagemagick ffmpeg python3-pygame
           test -x "$DEVKITARM/bin/arm-none-eabi-g++"
           test -f "$DEVKITPRO/libctru/lib/libctru.a"
           test -f "$DEVKITPRO/libctru/include/3ds.h"
@@ -199,6 +199,50 @@ jobs:
           test "$porn_index" -eq 35
           test -s native3ds/romfs/video/matrix.mp3
           test -s native3ds/romfs/video/porn.mp3
+
+      - name: Prepare Guardians ending cartoon and route voices
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -eux
+          mkdir -p /tmp/ending_frames native3ds/romfs/video/ending
+          python3 - <<'PY'
+          from pathlib import Path
+          import pygame
+          from ending import Ending
+
+          pygame.init()
+          pygame.display.set_mode((1, 1))
+          ending = Ending()
+          dummy = pygame.Surface((16, 16))
+          output = Path("/tmp/ending_frames")
+          fps = 6
+          count = 172
+          for index in range(count):
+              ending.draw(dummy, t=index / fps)
+              frame = pygame.transform.smoothscale(ending.stage, (400, 225))
+              canvas = pygame.Surface((400, 240))
+              canvas.fill((0, 0, 0))
+              canvas.blit(frame, (0, 7))
+              pygame.image.save(canvas, str(output / f"ending_{index:03d}.png"))
+          pygame.quit()
+          PY
+          ending_index=0
+          for frame in /tmp/ending_frames/ending_*.png; do
+            printf -v output 'native3ds/romfs/video/ending/ending_%03d.t3x' "$ending_index"
+            tex3ds "$frame" -f rgb565 -z auto -o "$output"
+            ending_index=$((ending_index + 1))
+          done
+          test "$ending_index" -eq 172
+          ffmpeg -y -loglevel error -i assets/audio/music/ending/witch_end_outro.mp3 -codec:a libmp3lame -b:a 96k native3ds/romfs/video/ending.mp3
+          ffmpeg -y -loglevel error -i assets/audio/voice/route_story/guardians/will_reverse.wav -codec:a libmp3lame -b:a 96k native3ds/romfs/audio/will_reverse.mp3
+          ffmpeg -y -loglevel error -i assets/audio/voice/route_story/phobos/phobos_r.wav -codec:a libmp3lame -b:a 96k native3ds/romfs/audio/phobos_reverse.mp3
+          test -s native3ds/romfs/video/ending/ending_171.t3x
+          test -s native3ds/romfs/video/ending.mp3
+          test -s native3ds/romfs/audio/will_reverse.mp3
+          test -s native3ds/romfs/audio/phobos_reverse.mp3
 
       - name: Build 3DSX
         shell: bash
