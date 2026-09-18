@@ -392,7 +392,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          git clone --depth 1 https://github.com/diasurgical/bannertool.git /tmp/bannertool
+          git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/diasurgical/bannertool.git /tmp/bannertool
           make -C /tmp/bannertool -j"$(nproc)"
           BANNERTOOL=/tmp/bannertool/output/bannertool
           test -x "$BANNERTOOL"
