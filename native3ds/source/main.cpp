@@ -136,10 +136,27 @@ struct Music {
     void configure(int p){
         if(phase==p) return; phase=p; pool.clear(); bag.clear(); firstPending=true; firstCycle=true; last.clear();
         if(p==0){ fixedFirst="romfs:/audio/menu_1.mp3"; pool={"romfs:/audio/menu_1.mp3","romfs:/audio/menu_2.mp3"}; }
-        else if(p==1){ fixedFirst="romfs:/audio/phase0.mp3"; pool={"romfs:/audio/phase0.mp3","romfs:/audio/music_arcade_1.mp3","romfs:/audio/music_arcade_2.mp3","romfs:/audio/music_arcade_3.mp3","romfs:/audio/music_arcade_4.mp3","romfs:/audio/music_arcade_5.mp3","romfs:/audio/music_arcade_6.mp3","romfs:/audio/music_bonus_1.mp3","romfs:/audio/music_football_1.mp3"}; }
-        else if(p==2){ fixedFirst="romfs:/audio/phase1_1.mp3"; pool={"romfs:/audio/phase1_1.mp3","romfs:/audio/phase1_2.mp3","romfs:/audio/phase1_3.mp3","romfs:/audio/music_phase1_hollow.mp3","romfs:/audio/music_crucified.mp3","romfs:/audio/music_crusified2.mp3","romfs:/audio/music_football_2.mp3"}; }
-        else if(p==3){ fixedFirst="romfs:/audio/phase2_guardians.mp3"; pool={"romfs:/audio/phase2_guardians.mp3","romfs:/audio/music_arcade_2.mp3","romfs:/audio/music_arcade_4.mp3","romfs:/audio/music_arcade_5.mp3","romfs:/audio/music_bonus_2.mp3","romfs:/audio/music_washing_1.mp3","romfs:/audio/music_washing_2.mp3"}; }
-        else { fixedFirst="romfs:/audio/phase2_phobos.mp3"; pool={"romfs:/audio/phase2_phobos.mp3","romfs:/audio/music_empty_hollow_1.mp3","romfs:/audio/music_empty_hollow_2.mp3","romfs:/audio/music_crucified.mp3","romfs:/audio/music_crusified2.mp3"}; }
+        // These are the exact user_music phase folders used by main.py.  The
+        // temporary arcade/bonus additions are deliberately absent.
+        else if(p==1){ fixedFirst="romfs:/audio/music_p0_opening.mp3"; pool={
+            "romfs:/audio/music_p0_00.mp3","romfs:/audio/music_p0_01.mp3","romfs:/audio/music_p0_02.mp3",
+            "romfs:/audio/music_p0_03.mp3","romfs:/audio/music_p0_04.mp3","romfs:/audio/music_p0_05.mp3",
+            "romfs:/audio/music_p0_06.mp3","romfs:/audio/music_p0_07.mp3","romfs:/audio/music_p0_08.mp3",
+            "romfs:/audio/music_p0_09.mp3","romfs:/audio/music_p0_10.mp3"}; }
+        else if(p==2){ fixedFirst.clear(); pool={
+            "romfs:/audio/music_p1_00.mp3","romfs:/audio/music_p1_01.mp3","romfs:/audio/music_p1_02.mp3",
+            "romfs:/audio/music_p1_03.mp3","romfs:/audio/music_p1_04.mp3","romfs:/audio/music_p1_05.mp3",
+            "romfs:/audio/music_p1_06.mp3","romfs:/audio/music_p1_07.mp3","romfs:/audio/music_p1_08.mp3",
+            "romfs:/audio/music_p1_09.mp3","romfs:/audio/music_p1_10.mp3","romfs:/audio/music_p1_11.mp3",
+            "romfs:/audio/music_p1_12.mp3","romfs:/audio/music_p1_13.mp3"}; }
+        else if(p==3){ fixedFirst.clear(); pool={
+            "romfs:/audio/music_guardians_00.mp3","romfs:/audio/music_guardians_01.mp3",
+            "romfs:/audio/music_guardians_02.mp3","romfs:/audio/music_guardians_03.mp3",
+            "romfs:/audio/music_guardians_04.mp3"}; }
+        else { fixedFirst="romfs:/audio/music_phobos_opening.mp3"; pool={
+            "romfs:/audio/music_phobos_00.mp3","romfs:/audio/music_phobos_01.mp3",
+            "romfs:/audio/music_phobos_02.mp3","romfs:/audio/music_phobos_03.mp3",
+            "romfs:/audio/music_phobos_04.mp3"}; }
     }
     void refillBag(){
         bag.clear();
@@ -157,7 +174,7 @@ struct Music {
         firstCycle=false;
     }
     std::string nextPath(){
-        if(firstPending){ firstPending=false; last=fixedFirst; return last; }
+        if(firstPending){ firstPending=false; if(!fixedFirst.empty()){last=fixedFirst;return last;} }
         if(bag.empty()) refillBag();
         std::string p=bag.back(); bag.pop_back(); last=p; return p;
     }
@@ -178,7 +195,7 @@ enum Mode { BOOT, MENU, RECORDS, GALLERY, SETTINGS, GAME, CUTSCENE, WINNER,
             VTD_MODE, PORN_GALLERY, JETIX_MODE, CARD_MODE };
 static Mode mode=BOOT, returnMode=MENU, cutsceneReturn=MENU;
 static bool running=true, paused=false, gameOver=false, dualScreen=false, phobosFall=true;
-static bool phobosDeletedWin=false,emptyRosterBored=false;
+static bool phobosDeletedWin=false,emptyRosterBored=false,clearPending=false;
 static bool phobosRoute=false, guardiansRoute=false, horrorPieces=false;
 static bool pieceEnabled[7]={true,true,true,true,true,true,true},phobosEnabled=true,settingsRoster=false;
 static int startSpeed=1;
@@ -190,6 +207,10 @@ static bool story100AudioStopped=false;
 static int score=0,lines=0,level=1,frameCounter=0,secretTimer=0;
 static int gravityFrames=0,lockFrames=0,lockResets=0,dasDirection=0,dasFrames=0;
 static int rotationCount=0,rotationHintBlockPieces=0,holdCountWindow=0,emptyRosterFrames=0,boredFrames=0;
+static int voiceCooldown=0,playFrames=0,pauseHintEligibleAt=0,clearBeforeLines=0;
+static int consecutiveGameOvers=0;
+static bool pauseHintPlayed=false,gameOverVoiceHandled=false,loserStreakVoiceUsed=false,layoutReactionDone=false;
+static bool spawnVoiceUsed[8]{};
 static int victoryTimer=0,roomEntryTimer=0;
 static int clearFxTimer=0,clearFxCount=0,gameplayMatrixTimer=0,gameplayJetixTimer=0,gameplayVtdTimer=0;
 static int clearFxRows[4]={};
@@ -289,10 +310,37 @@ static void startEnding(Mode after){if(after!=GALLERY)saveRecord();mode=ENDING;r
 static void finishRoomEntry(){mode=PHOBOS_ROOM;roomPose=rand()%6;roomLine=rand()%ROOM_LINE_COUNT;audio.play("romfs:/audio/phobos_room.mp3",true);}
 static void enterRoom(){if(mode==ROOM_ENTRY||mode==PHOBOS_ROOM)return;saveRecord();mode=ROOM_ENTRY;roomEntryTimer=0;music.autoAdvance=false;audio.stop();voiceAudio.stop();voiceAudio.play("romfs:/audio/phobos_reverse.mp3");}
 static void resetClassicLock(){lockFrames=lockResets=0;gravityFrames=0;dasDirection=dasFrames=0;}
-static void spawn(){curType=nextType;rotationCount=0;if(rotationHintBlockPieces>0)rotationHintBlockPieces--;if(curType<0){nextType=-1;curRot=0;curX=3;curY=-1;holdUsed=false;resetClassicLock();return;}rememberSpawn(curType);nextType=nextPiece();curRot=0;curX=3;curY=-1;holdUsed=false;resetClassicLock();if(!fits(curType,curRot,curX,curY)){if(phobosRoute)enterRoom();else if(guardiansRoute)startEnding(MENU);else{gameOver=true;gameOverIndex=0;saveRecord();}}}
-static void newGame(){memset(board,0,sizeof(board));score=lines=0;level=1;gameOver=paused=false;recordSaved=false;holdType=-1;holdUsed=false;resetRandomizer();resetClassicLock();phobosRoute=guardiansRoute=horrorPieces=false;clearFxTimer=gameplayMatrixTimer=gameplayJetixTimer=gameplayVtdTimer=0;rotationCount=rotationHintBlockPieces=holdCountWindow=emptyRosterFrames=boredFrames=0;emptyRosterBored=false;phobosDeletedWin=!phobosEnabled;mode=GAME;
+static bool playPhobosVoice(const char* path,bool force=false,bool ignoreCooldown=false){
+ if(!phobosEnabled||guardiansRoute||gameplayVtdTimer>0||voiceAudio.playing)return false;
+ if(!force&&!ignoreCooldown&&voiceCooldown>0)return false;
+ if(!voiceAudio.play(path))return false;voiceCooldown=60*18;return true;
+}
+static void maybeSpawnVoice(int t){
+ // Exact rare, once-per-run spawn reactions from the Python build.
+ if(t==2){
+  if(!spawnVoiceUsed[0]&&rand()%1000<45&&playPhobosVoice("romfs:/audio/react_phobos_name_traitors.mp3")){spawnVoiceUsed[0]=true;return;}
+  if(!spawnVoiceUsed[1]&&rand()%1000<25&&playPhobosVoice("romfs:/audio/react_phobos_caleb_rebel.mp3"))spawnVoiceUsed[1]=true;
+ }else if(t==1){
+  int options[2],n=0;if(!spawnVoiceUsed[2])options[n++]=2;if(!spawnVoiceUsed[3])options[n++]=3;
+  if(n&&rand()%1000<35){int k=options[rand()%n];if(playPhobosVoice(k==2?"romfs:/audio/react_phobos_blunk_angry.mp3":"romfs:/audio/react_phobos_blunk_annoyed.mp3"))spawnVoiceUsed[k]=true;}
+ }else if(t==4){
+  if(!spawnVoiceUsed[4]&&rand()%1000<45&&playPhobosVoice("romfs:/audio/react_phobos_need_crystal.mp3")){spawnVoiceUsed[4]=true;return;}
+  if(!spawnVoiceUsed[5]&&rand()%1000<45&&playPhobosVoice("romfs:/audio/react_phobos_crystal.mp3")){spawnVoiceUsed[5]=true;return;}
+  if(!spawnVoiceUsed[6]&&rand()%1000<18&&playPhobosVoice("romfs:/audio/react_phobos_well_girls.mp3"))spawnVoiceUsed[6]=true;
+ }else if(t==0||t==3||t==5||t==6){
+  if(!spawnVoiceUsed[6]&&rand()%1000<18&&playPhobosVoice("romfs:/audio/react_phobos_well_girls.mp3")){spawnVoiceUsed[6]=true;return;}
+  if(!spawnVoiceUsed[7]&&rand()%1000<8&&playPhobosVoice("romfs:/audio/react_phobos_guardian.mp3"))spawnVoiceUsed[7]=true;
+ }
+}
+static void handleGameOverVoice(){
+ if(gameOverVoiceHandled||emptyRosterBored||lines>=200)return;gameOverVoiceHandled=true;consecutiveGameOvers++;
+ if(consecutiveGameOvers>=5&&!loserStreakVoiceUsed&&playPhobosVoice("romfs:/audio/react_phobos_you_loser.mp3",true)){loserStreakVoiceUsed=true;return;}
+ if(rand()%100<38)playPhobosVoice("romfs:/audio/react_phobos_expected_no_less.mp3",true);
+}
+static void spawn(){curType=nextType;rotationCount=0;if(rotationHintBlockPieces>0)rotationHintBlockPieces--;if(curType<0){nextType=-1;curRot=0;curX=3;curY=-1;holdUsed=false;resetClassicLock();return;}rememberSpawn(curType);nextType=nextPiece();curRot=0;curX=3;curY=-1;holdUsed=false;resetClassicLock();maybeSpawnVoice(curType);if(!fits(curType,curRot,curX,curY)){if(phobosRoute)enterRoom();else if(guardiansRoute)startEnding(MENU);else{gameOver=true;gameOverIndex=0;saveRecord();handleGameOverVoice();}}}
+static void newGame(){memset(board,0,sizeof(board));score=lines=0;level=1;gameOver=paused=false;recordSaved=false;holdType=-1;holdUsed=false;resetRandomizer();resetClassicLock();phobosRoute=guardiansRoute=horrorPieces=false;clearFxTimer=gameplayMatrixTimer=gameplayJetixTimer=gameplayVtdTimer=0;clearPending=false;rotationCount=rotationHintBlockPieces=holdCountWindow=emptyRosterFrames=boredFrames=0;voiceCooldown=playFrames=0;pauseHintEligibleAt=60*(150+rand()%271);pauseHintPlayed=gameOverVoiceHandled=layoutReactionDone=false;memset(spawnVoiceUsed,0,sizeof(spawnVoiceUsed));emptyRosterBored=false;phobosDeletedWin=!phobosEnabled;mode=GAME;
  if(phobosDeletedWin){curType=nextType=-1;music.autoAdvance=false;audio.stop();voiceAudio.stop();return;}
- nextType=nextPiece();spawn();music.autoAdvance=true;music.start(1);if(rand()%100<65){char p[80];snprintf(p,sizeof(p),"romfs:/audio/react_phobos_start_%d.mp3",rand()%6);voiceAudio.play(p);}}
+ nextType=nextPiece();spawn();music.autoAdvance=true;music.start(1);if(rand()%100<65){int roll=rand()%100,idx=roll<25?0:roll<50?1:roll<74?2:roll<83?3:roll<91?4:5;char p[80];snprintf(p,sizeof(p),"romfs:/audio/react_phobos_start_%d.mp3",idx);voiceAudio.stop();if(voiceAudio.play(p))voiceCooldown=60*18;}}
 
 static void triggerMilestones(int before){
  if(before<100&&lines>=100){startCutscene(100,GAME);return;}
@@ -302,14 +350,14 @@ static void triggerMilestones(int before){
  if(music.phase!=phase)music.start(phase);
 }
 static void developerAddLines(){int before=lines;lines+=10;score+=1000;triggerMilestones(before);}
-static void clearLines(){
+static bool clearLines(){
  int cleared=0;
  for(int y=BH-1;y>=0;y--){
   bool full=true;for(int x=0;x<BW;x++)if(!board[y][x]){full=false;break;}
-  if(full){if(cleared<4)clearFxRows[cleared]=y;cleared++;for(int yy=y;yy>0;yy--)memcpy(board[yy],board[yy-1],sizeof(board[0]));memset(board[0],0,sizeof(board[0]));y++;}
+  if(full){if(cleared<4)clearFxRows[cleared]=y;cleared++;}
  }
- if(!cleared)return;
- clearFxCount=std::min(cleared,4);clearFxTimer=36;int before=lines;lines+=cleared;score+=100*cleared*cleared;level=1+lines/10;
+ if(!cleared)return false;
+ clearFxCount=std::min(cleared,4);clearFxTimer=cleared==4?36:18;clearPending=true;clearBeforeLines=lines;
  sfxAudio.play(cleared==4?"romfs:/audio/sfx_heart_portal.mp3":((rand()&1)?"romfs:/audio/sfx_line_clear_a.mp3":"romfs:/audio/sfx_line_clear_b.mp3"));
  if(phobosRoute){
   if(cleared==4){char p[80];snprintf(p,sizeof(p),"romfs:/audio/react_phobos_tetris_%d.mp3",1+rand()%3);voiceAudio.play(p);}
@@ -329,16 +377,23 @@ static void clearLines(){
    else if(cleared==2&&rand()%100<82){char p[80];snprintf(p,sizeof(p),"romfs:/audio/react_blunk_two_%d.mp3",1+rand()%3);voiceAudio.play(p);}
   }
  }
- triggerMilestones(before);
+ return true;
 }
-static void lockPiece(){bool horror=phobosRoute&&horrorPieces;for(int i=0;i<4;i++){int x,y;blockPos(curType,curRot,i,x,y);x+=curX;y+=curY;if(y>=0&&y<BH&&x>=0&&x<BW)board[y][x]=plainMode()?-(curType+1):encodeCell(curType,curRot,i,horror);}clearLines();if(mode==GAME)spawn();}
+static void finishPendingClear(){
+ if(!clearPending)return;bool remove[BH]{};for(int i=0;i<clearFxCount;i++)if(clearFxRows[i]>=0&&clearFxRows[i]<BH)remove[clearFxRows[i]]=true;
+ int write=BH-1;for(int y=BH-1;y>=0;y--)if(!remove[y]){if(write!=y)memcpy(board[write],board[y],sizeof(board[0]));write--;}
+ while(write>=0){memset(board[write],0,sizeof(board[0]));write--;}
+ int cleared=clearFxCount;clearPending=false;clearFxCount=0;lines+=cleared;static const int awards[5]={0,100,300,500,800};score+=awards[cleared];level=1+lines/10;
+ triggerMilestones(clearBeforeLines);if(mode==GAME)spawn();
+}
+static void lockPiece(){bool horror=phobosRoute&&horrorPieces;for(int i=0;i<4;i++){int x,y;blockPos(curType,curRot,i,x,y);x+=curX;y+=curY;if(y>=0&&y<BH&&x>=0&&x<BW)board[y][x]=plainMode()?-(curType+1):encodeCell(curType,curRot,i,horror);}if(clearLines())curType=-1;else if(mode==GAME)spawn();}
 static void hardDrop(){if(curType<0)return;while(fits(curType,curRot,curX,curY+1)){curY++;score+=2;}lockPiece();}
 static void classicAdjusted(bool wasGrounded){if(!phobosFall&&wasGrounded&&lockResets<15){lockFrames=0;lockResets++;}}
 static bool moveHorizontal(int dx){if(curType<0)return false;bool grounded=!fits(curType,curRot,curX,curY+1);if(fits(curType,curRot,curX+dx,curY)){curX+=dx;classicAdjusted(grounded);return true;}return false;}
 static bool rotatePiece(int direction){if(curType<0)return false;rotationCount++;
- if(rotationCount>=5&&rotationHintBlockPieces<=0&&phobosEnabled&&!guardiansRoute&&gameplayVtdTimer<=0&&!voiceAudio.playing){int chance=rotationCount==5?12:rotationCount==6?24:rotationCount==7?38:rotationCount==8?55:72;if(rand()%100<chance&&voiceAudio.play("romfs:/audio/react_phobos_rotate_hint.mp3")){rotationCount=-999;rotationHintBlockPieces=6;}}
+ if(rotationCount>=5&&rotationHintBlockPieces<=0){int chance=rotationCount==5?12:rotationCount==6?24:rotationCount==7?38:rotationCount==8?55:72;if(rand()%100<chance&&playPhobosVoice("romfs:/audio/react_phobos_rotate_hint.mp3",false,true)){rotationCount=-999;rotationHintBlockPieces=6;}}
  bool grounded=!fits(curType,curRot,curX,curY+1);int nr=(curRot+direction+4)&3;static const int kick[]={0,-1,1,-2,2};for(int dx:kick)if(fits(curType,nr,curX+dx,curY)){curRot=nr;curX+=dx;classicAdjusted(grounded);return true;}return false;}
-static void hold(){if(holdUsed||curType<0)return;if(holdType<0){holdType=curType;spawn();}else{std::swap(holdType,curType);curRot=0;curX=3;curY=-1;resetClassicLock();}holdUsed=true;holdCountWindow++;if(holdCountWindow>=7&&rand()%100<35&&phobosEnabled&&!guardiansRoute&&gameplayVtdTimer<=0&&!voiceAudio.playing){if(voiceAudio.play("romfs:/audio/react_phobos_hold_hint.mp3"))holdCountWindow=0;}}
+static void hold(){if(holdUsed||curType<0)return;if(holdType<0){holdType=curType;spawn();}else{std::swap(holdType,curType);curRot=0;curX=3;curY=-1;resetClassicLock();if(!fits(curType,curRot,curX,curY)){gameOver=true;gameOverIndex=0;saveRecord();handleGameOverVoice();}}holdUsed=true;holdCountWindow++;if(holdCountWindow>=7&&rand()%100<35){if(playPhobosVoice("romfs:/audio/react_phobos_hold_hint.mp3"))holdCountWindow=0;}}
 static int gravityInterval(){int speedLines=lines+(std::max(1,std::min(5,startSpeed))-1)*25;if(speedLines<25)return 32;if(speedLines<50)return 28;if(speedLines<75)return 24;if(speedLines<100)return 20;if(speedLines<125)return 17;if(speedLines<150)return 14;if(speedLines<175)return 11;if(speedLines<200)return 9;return std::max(3,8-(speedLines-200)/50);}
 
 static void drawPlain(float x,float y,float cell,int t,float z){x+=stereoX(z);u32 col=pieceColor(t);C2D_DrawRectSolid(x+1,y+1,z,cell-2,cell-2,col);C2D_DrawRectSolid(x+2,y+2,z+0.01f,cell-4,std::max(1.0f,cell*0.16f),C2D_Color32(255,255,255,115));}
@@ -358,7 +413,11 @@ static void drawBoardSlice(float x0,float y0,float cell,int yStart,int count){
  if(!phobosFall&&curType>=0){int gy=curY;while(fits(curType,curRot,curX,gy+1))gy++;for(int i=0;i<4;i++){int x,y;blockPos(curType,curRot,i,x,y);x+=curX;y+=gy;if(y<yStart||y>=yStart+count)continue;float dx=x0+x*cell+stereoX(0.43f),dy=y0+(y-yStart)*cell;u32 gc=C2D_Color32(238,190,255,95);C2D_DrawRectSolid(dx+1,dy+1,0.43f,cell-2,1,gc);C2D_DrawRectSolid(dx+1,dy+cell-2,0.43f,cell-2,1,gc);C2D_DrawRectSolid(dx+1,dy+1,0.43f,1,cell-2,gc);C2D_DrawRectSolid(dx+cell-2,dy+1,0.43f,1,cell-2,gc);}}
  for(int yy=0;yy<count;yy++){int y=yStart+yy;for(int x=0;x<BW;x++){int code=board[y][x];if(!code)continue;if(code<0)drawPlain(x0+x*cell,y0+yy*cell,cell,cellType(code),0.5f);else drawSpriteCell((code&255)-1,(code&0x10000)!=0,x0+x*cell,y0+yy*cell,cell,0.5f);}}
  if(curType>=0)for(int i=0;i<4;i++){int x,y;blockPos(curType,curRot,i,x,y);x+=curX;y+=curY;if(y<yStart||y>=yStart+count)continue;float dx=x0+x*cell,dy=y0+(y-yStart)*cell;if(plainMode())drawPlain(dx,dy,cell,curType,0.6f);else drawSpriteCell(spriteIndex(curType,curRot,i),phobosRoute&&horrorPieces,dx,dy,cell,0.6f);}
- if(clearFxTimer>0){u32 bolt=phobosRoute?C2D_Color32(62,5,92,235):C2D_Color32(225,25,145,235);for(int i=0;i<clearFxCount;i++){int ry=clearFxRows[i];if(ry<yStart||ry>=yStart+count)continue;float yy=y0+(ry-yStart)*cell+cell*.45f;float sx=x0+stereoX(0.78f);for(int k=0;k<6;k++){float xx=sx+k*(BW*cell/6.0f);C2D_DrawRectSolid(xx,yy+((k+frameCounter)&1?2:-2),0.78f,BW*cell/8.0f,2,bolt);}}}
+ if(clearFxTimer>0){
+  u32 bolt=phobosRoute?C2D_Color32(82,8,120,245):C2D_Color32(225,25,145,235);
+  for(int i=0;i<clearFxCount;i++){int ry=clearFxRows[i];if(ry<yStart||ry>=yStart+count)continue;float rowY=y0+(ry-yStart)*cell;float sx=x0+stereoX(0.78f);u8 wash=(u8)(55+((frameCounter/3)&1)*35);C2D_DrawRectSolid(sx,rowY,0.76f,BW*cell,cell,C2D_Color32(phobosRoute?35:160,phobosRoute?0:8,phobosRoute?55:100,wash));float yy=rowY+cell*.45f;for(int k=0;k<6;k++){float xx=sx+k*(BW*cell/6.0f);C2D_DrawRectSolid(xx,yy+((k+frameCounter)&1?2:-2),0.78f,BW*cell/8.0f,2,bolt);}}
+  if(clearFxCount==4){int lo=clearFxRows[0],hi=clearFxRows[0];for(int i=1;i<4;i++){lo=std::min(lo,clearFxRows[i]);hi=std::max(hi,clearFxRows[i]);}float centerRow=(lo+hi+1)*0.5f;if(centerRow>=yStart&&centerRow<yStart+count){float pulse=1.0f+0.08f*std::sin((36-clearFxTimer)*0.35f);float cx=x0+BW*cell*.5f,cy=y0+(centerRow-yStart)*cell;if(phobosRoute&&phobosEnabled)phobosGame.drawFit(cx-38*pulse,cy-49*pulse,76*pulse,98*pulse,0.96f);else endingHeart.drawFit(cx-39*pulse,cy-39*pulse,78*pulse,78*pulse,0.96f);}}
+ }
 }
 static void drawMiniPiece(int t,float x,float y,float cell){if(t<0)return;int minx=9,miny=9;for(int i=0;i<4;i++){int bx,by;blockPos(t,0,i,bx,by);minx=std::min(minx,bx);miny=std::min(miny,by);}for(int i=0;i<4;i++){int bx,by;blockPos(t,0,i,bx,by);float dx=x+(bx-minx)*cell,dy=y+(by-miny)*cell;if(plainMode())drawPlain(dx,dy,cell,t,0.5f);else drawSpriteCell(spriteIndex(t,0,i),phobosRoute&&horrorPieces,dx,dy,cell,0.5f);}}
 
@@ -432,7 +491,7 @@ static void drawBoot(){
  C2D_TargetClear(botTarget,C2D_Color32(0,0,0,255));beginBottom();centerText(160,96,0.52f,DIM,"PRESS ANY KEY");centerText(160,132,0.38f,DIM,"TO CONTINUE");
 }
 
-static void drawMenu(){bgMenu.drawCover(0,0,TOP_W,H,0.08f);C2D_DrawRectSolid(stereoX(0.18f),0,0.18f,TOP_W,H,C2D_Color32(0,0,0,90));if(phobosEnabled)phobosMenu.drawFit(250,18,145,216,0.86f);drawText(18,20,0.72f,ACCENT,"W.I.T.C.H. TETRIS 3DS");drawText(20,48,0.43f,WHITE,"NATIVE STORY TEST 11");const char* items[]={"NEW GAME","RECORDS","CUTSCENES","SETTINGS","EXIT"};for(int i=0;i<5;i++){if(i==menuIndex)C2D_DrawRectSolid(18+stereoX(0.62f),76+i*31,0.62f,205,26,C2D_Color32(95,45,120,220));drawText(28,78+i*31,0.50f,i==menuIndex?WHITE:DIM,"> %s",items[i]);}C2D_TargetClear(botTarget,BG);beginBottom();centerText(160,25,0.6f,ACCENT,"MAIN MENU");centerText(160,70,0.45f,WHITE,"D-Pad: select   A: open");centerText(160,105,0.39f,DIM,"Character choice unlocks at 200 lines");centerText(160,185,0.4f,DIM,"START: exit");}
+static void drawMenu(){bgMenu.drawCover(0,0,TOP_W,H,0.04f);C2D_DrawRectSolid(-10+stereoX(0.16f),0,0.16f,420,H,C2D_Color32(0,0,0,90));if(phobosEnabled)phobosMenu.drawFit(250,18,145,216,0.88f);float oz=textZ,od=textDepth;textZ=0.76f;textDepth=0.76f;drawText(18,20,0.72f,ACCENT,"W.I.T.C.H. TETRIS 3DS");drawText(20,48,0.43f,WHITE,"NATIVE STORY TEST 12");const char* items[]={"NEW GAME","RECORDS","CUTSCENES","SETTINGS","EXIT"};for(int i=0;i<5;i++){if(i==menuIndex)C2D_DrawRectSolid(18+stereoX(0.58f),76+i*31,0.58f,205,26,C2D_Color32(95,45,120,220));drawText(28,78+i*31,0.50f,i==menuIndex?WHITE:DIM,"> %s",items[i]);}textZ=oz;textDepth=od;C2D_TargetClear(botTarget,BG);beginBottom();centerText(160,25,0.6f,ACCENT,"MAIN MENU");centerText(160,70,0.45f,WHITE,"D-Pad: select   A: open");centerText(160,105,0.39f,DIM,"Character choice unlocks at 200 lines");centerText(160,185,0.4f,DIM,"START: exit");}
 static void drawRecords(){
  drawText(18,14,0.70f,ACCENT,"RECORDS");drawText(25,47,0.35f,DIM,"#      LINES        SCORE");
  if(records.empty())centerText(200,108,0.48f,DIM,"NO RECORDS YET");
@@ -445,10 +504,11 @@ static void drawGallery(){drawText(18,18,0.72f,ACCENT,"CUTSCENES");const char* i
 static void drawSettings(){drawText(18,18,0.72f,ACCENT,settingsRoster?"FIGURES / PHOBOS":"OPTIONS");if(!settingsRoster){const char* names[]={"TETRIS LAYOUT","PIECE FALL MODE","START SPEED","FIGURE ROSTER","BACK"};for(int i=0;i<5;i++){if(i==settingsIndex)C2D_DrawRectSolid(15+stereoX(0.54f),55+i*35,0.54f,370,30,C2D_Color32(85,40,115,230));drawText(25,60+i*35,0.43f,i==settingsIndex?WHITE:DIM,"%s",names[i]);if(i==0)drawText(250,60+i*35,0.40f,ACCENT,"%s",dualScreen?"DUAL":"COMPACT");if(i==1)drawText(250,60+i*35,0.40f,ACCENT,"%s",phobosFall?"PHOBOS":"CLASSIC");if(i==2)drawText(320,60+i*35,0.40f,ACCENT,"%d",startSpeed);}}else{const char* rn[]={"I  CORNELIA","O  BLUNK","T  CALEB","S  IRMA","Z  WILL","J  TARANEE","L  HAY LIN","PHOBOS","BACK"};for(int i=0;i<9;i++){float y=44+i*21;if(i==settingsIndex)C2D_DrawRectSolid(16+stereoX(0.54f),y-2,0.54f,368,20,C2D_Color32(85,40,115,230));drawText(25,y,0.37f,i==settingsIndex?WHITE:DIM,"%s",rn[i]);if(i<8)drawText(310,y,0.35f,(i<7?pieceEnabled[i]:phobosEnabled)?GREEN:RED,(i<7?pieceEnabled[i]:phobosEnabled)?"ON":"OFF");}}C2D_TargetClear(botTarget,C2D_Color32(14,8,25,255));beginBottom();centerText(160,35,0.52f,WHITE,"A / LEFT / RIGHT: change");centerText(160,82,0.42f,DIM,settingsRoster?"All seven figures may be disabled":"START SPEED changes gravity only");centerText(160,135,0.4f,ACCENT,settingsRoster?"Phobos remains independently optional":"A+B toggles dual layout in game");centerText(160,190,0.4f,DIM,"B: back");}
 
 static void drawPauseTop(){
- C2D_DrawRectSolid(-20+stereoX(0.965f),0,0.965f,440,240,C2D_Color32(0,0,0,218));
+ // Three visibly separate planes: dimmer, selection slab and text.
+ C2D_DrawRectSolid(-20+stereoX(0.72f),0,0.72f,440,240,C2D_Color32(0,0,0,218));
  const char* p[]={"CONTINUE","RESTART","MAIN MENU"};
- for(int i=0;i<3;i++)if(i==pauseIndex)C2D_DrawRectSolid(76+stereoX(0.98f),70+i*48,0.98f,248,38,C2D_Color32(100,50,130,255));
- float oldZ=textZ,oldDepth=textDepth;textZ=0.995f;textDepth=0.995f;
+ for(int i=0;i<3;i++)if(i==pauseIndex)C2D_DrawRectSolid(76+stereoX(0.86f),70+i*48,0.86f,248,38,C2D_Color32(100,50,130,255));
+ float oldZ=textZ,oldDepth=textDepth;textZ=0.96f;textDepth=0.96f;
  centerText(200,24,0.68f,ACCENT,"PAUSED");for(int i=0;i<3;i++)centerText(200,79+i*48,0.54f,i==pauseIndex?WHITE:DIM,p[i]);
  textZ=oldZ;textDepth=oldDepth;
 }
@@ -480,7 +540,6 @@ static void drawGameplayEffects(float width,float height,bool topScreen){
   for(int i=0;i<24;i++){float fx=(float)((i*53+frameCounter*(1+i%4))%(int)width),fy=(float)((i*29+frameCounter*(2+i%3))%(int)height);u32 c=(i%3==0)?C2D_Color32(255,70,170,210):(i%3==1)?C2D_Color32(255,225,50,210):C2D_Color32(70,210,255,210);C2D_DrawRectSolid(fx+stereoX(0.74f),fy,0.74f,3,3,c);}
  }
  if(topScreen&&gameplayVtdTimer>0){if(dualScreen)vtdObs.drawFit(312,145,82,92,0.92f);else vtdObs.drawFit(286,31,109,202,0.92f);}
- if(topScreen&&clearFxTimer>0&&clearFxCount==4){if(phobosRoute&&phobosEnabled)phobosGame.drawFit(8,42,102,174,0.95f);else endingHeart.drawFit(9,69,96,96,0.95f);}
 }
 static void drawGame(){
  int bg=lines<100?0:(guardiansRoute?2:1);
@@ -495,7 +554,7 @@ static void drawGame(){
  drawGameplayEffects(400,240,true);
  C2D_TargetClear(botTarget,BG);beginBottom();
  if(dualScreen){bgGame[bg].drawStretch(-40,-240,400,480,0.08f);C2D_DrawRectSolid(0,0,0.15f,320,240,C2D_Color32(0,0,0,12));drawBoardSlice(40,0,24,10,10);C2D_DrawRectSolid(2,198,0.9f,36,38,C2D_Color32(90,45,120,235));centerText(20,207,0.29f,WHITE,"KB");}
- else{bgGame[bg].drawCover(0,0,320,240,0.08f);C2D_DrawRectSolid(0,0,0.15f,320,240,C2D_Color32(0,0,0,145));centerText(160,15,0.46f,ACCENT,"CONTROLS");drawText(16,52,0.38f,WHITE,"D-Pad move/drop   A/B rotate");drawText(16,78,0.38f,WHITE,"Y hard drop       X hold");drawText(16,104,0.38f,WHITE,"L/R shuffled next track");drawText(16,130,0.38f,WHITE,"START/SELECT pause");drawText(16,156,0.36f,DIM,"A+B: dual-screen layout");C2D_DrawRectSolid(178,194,0.3f,126,36,C2D_Color32(90,45,120,235));centerText(241,203,0.42f,WHITE,"KEYBOARD");}
+ else{bgGame[bg].drawCover(0,0,320,240,0.08f);C2D_DrawRectSolid(0,0,0.15f,320,240,C2D_Color32(0,0,0,145));centerText(160,15,0.46f,ACCENT,"CONTROLS");drawText(16,52,0.38f,WHITE,"D-Pad move   UP/A/B rotate");drawText(16,78,0.38f,WHITE,"Y hard drop       X hold");drawText(16,104,0.38f,WHITE,"L/R original phase shuffle");drawText(16,130,0.38f,WHITE,"START/SELECT pause");drawText(16,156,0.36f,DIM,"A+B: dual-screen layout");C2D_DrawRectSolid(178,194,0.3f,126,36,C2D_Color32(90,45,120,235));centerText(241,203,0.42f,WHITE,"KEYBOARD");}
  drawGameplayEffects(320,240,false);
 }
 
@@ -568,7 +627,7 @@ static void render(){
 
 static void finishCutscene(){music.autoAdvance=true;if(cutsceneStage==100&&cutsceneReturn==GAME){mode=GAME;music.start(2);}else if(cutsceneStage==200&&cutsceneReturn==WINNER){mode=WINNER;winnerChoice=0;music.start(0);audio.play("romfs:/audio/music_winner_choice.mp3",true);}else{mode=cutsceneReturn;if(mode==MENU)music.start(0);}}
 static int cutscenePages(){return 4;}
-static void maybePauseReaction(bool leaving){if(!phobosEnabled||guardiansRoute||gameplayVtdTimer>0||voiceAudio.playing)return;int chance=leaving?34:52;if(rand()%100>=chance)return;char p[80];snprintf(p,sizeof(p),"romfs:/audio/react_phobos_pause_%d.mp3",rand()%6);voiceAudio.play(p);}
+static void maybePauseReaction(bool leaving){if(!phobosEnabled||guardiansRoute||gameplayVtdTimer>0||voiceAudio.playing)return;int chance=leaving?34:52;if(rand()%100>=chance)return;char p[80];snprintf(p,sizeof(p),"romfs:/audio/react_phobos_pause_%d.mp3",rand()%6);playPhobosVoice(p,true);}
 static void activatePause(){if(pauseIndex==0){paused=false;audio.setPause(false);sfxAudio.setPause(false);maybePauseReaction(true);}else if(pauseIndex==1){saveRecord();newGame();}else{saveRecord();paused=false;mode=MENU;music.start(0);}}
 static void activateGameOver(){if(gameOverIndex==0)newGame();else{gameOver=false;mode=MENU;music.start(0);}}
 
@@ -583,13 +642,14 @@ static void handleInput(u32 kd,u32 kh,touchPosition tp){
   if(gameOver){if(kd&KEY_UP||kd&KEY_DOWN)gameOverIndex^=1;if(kd&KEY_A)activateGameOver();if(kd&KEY_B){gameOverIndex=1;activateGameOver();}return;}
   if(paused){if(kd&KEY_UP)pauseIndex=(pauseIndex+2)%3;if(kd&KEY_DOWN)pauseIndex=(pauseIndex+1)%3;if(kd&(KEY_A|KEY_Y|KEY_RIGHT))activatePause();if(kd&(KEY_B|KEY_START|KEY_SELECT)){paused=false;audio.setPause(false);sfxAudio.setPause(false);maybePauseReaction(true);}return;}
   if(kd&(KEY_START|KEY_SELECT)){paused=true;pauseIndex=0;audio.setPause(true);sfxAudio.setPause(true);maybePauseReaction(false);return;}
+  if(clearPending)return;
   bool ax=((kh&(KEY_A|KEY_X))==(KEY_A|KEY_X))&&(kd&(KEY_A|KEY_X));if(ax){developerAddLines();return;}
-  bool ab=((kh&(KEY_A|KEY_B))==(KEY_A|KEY_B))&&(kd&(KEY_A|KEY_B));if(ab){dualScreen=!dualScreen;saveSettings();return;}
+  bool ab=((kh&(KEY_A|KEY_B))==(KEY_A|KEY_B))&&(kd&(KEY_A|KEY_B));if(ab){dualScreen=!dualScreen;saveSettings();if(!layoutReactionDone&&rand()%100<8&&playPhobosVoice("romfs:/audio/react_phobos_layout.mp3")){layoutReactionDone=true;}return;}
   if(kd&KEY_TOUCH){bool hit=dualScreen?(tp.px<=40&&tp.py>=190):(tp.px>=178&&tp.px<=304&&tp.py>=188);if(hit){openCodeKeyboard();return;}}
   if(kd&KEY_LEFT)moveHorizontal(-1);if(kd&KEY_RIGHT)moveHorizontal(1);
   if(!phobosFall){int direction=((kh&KEY_RIGHT)?1:0)-((kh&KEY_LEFT)?1:0);if(direction!=dasDirection){dasDirection=direction;dasFrames=0;}if(direction){dasFrames++;if(dasFrames>=10&&(dasFrames-10)%3==0)moveHorizontal(direction);}}
   if(kh&KEY_DOWN&&frameCounter%3==0&&curType>=0){if(fits(curType,curRot,curX,curY+1)){curY++;if(!phobosFall)lockFrames=0;}else if(phobosFall)lockPiece();}
-  if(kd&KEY_A)rotatePiece(1);if(kd&KEY_B)rotatePiece(-1);if(kd&KEY_Y)hardDrop();if(kd&KEY_X)hold();if(kd&(KEY_L|KEY_R)){if(gameplayVtdTimer>0){gameplayVtdTimer=0;music.autoAdvance=true;}music.playNext();}return;
+  if(kd&(KEY_A|KEY_UP))rotatePiece(1);if(kd&KEY_B)rotatePiece(-1);if(kd&KEY_Y)hardDrop();if(kd&KEY_X)hold();if(kd&(KEY_L|KEY_R)){if(gameplayVtdTimer>0){gameplayVtdTimer=0;music.autoAdvance=true;}music.playNext();}return;
  }
  if(mode==CUTSCENE){
   if(kd&(KEY_B|KEY_START)){cutscenePage=cutscenePages();finishCutscene();return;}
@@ -613,14 +673,16 @@ static void updateVideo(){int idx=(videoTick*videoFps)/60;if(idx>=videoCount||au
 static void updateEnding(){if(endingFinished)return;u64 elapsed=osGetTime()-endingStartMs;int idx=(int)((elapsed*ENDING_FPS)/1000);if(idx>=ENDING_FRAME_COUNT){endingFinished=true;audio.stop();return;}if(idx!=endingLoaded){endingLoaded=idx;endingFrame.free();char p[96];snprintf(p,sizeof(p),"romfs:/video/ending/ending_%03d.t3x",idx);endingFrame.load(p);}endingTick++;}
 static void update(){
  frameCounter++;music.update();voiceAudio.update();sfxAudio.update();
+ if(voiceCooldown>0)voiceCooldown--;
  if(mode==CUTSCENE&&cutsceneStage==100&&cutscenePage==0){story100Tick++;if(story100Tick<56)audio.setPause(((story100Tick/5)%3)==1);else if(!story100AudioStopped){audio.setPause(false);audio.stop();story100AudioStopped=true;}}
- if(clearFxTimer>0)clearFxTimer--;if(gameplayMatrixTimer>0)gameplayMatrixTimer--;if(gameplayJetixTimer>0)gameplayJetixTimer--;
+ if(clearFxTimer>0){clearFxTimer--;if(clearFxTimer==0&&clearPending)finishPendingClear();}if(gameplayMatrixTimer>0)gameplayMatrixTimer--;if(gameplayJetixTimer>0)gameplayJetixTimer--;
  if(gameplayVtdTimer>0){gameplayVtdTimer--;if(audio.finished||gameplayVtdTimer==0){audio.finished=false;gameplayVtdTimer=0;music.autoAdvance=true;music.playNext();}}
  if(mode==VIDEO_MODE)updateVideo();if(mode==ENDING)updateEnding();if(mode==ROUTE_VICTORY)victoryTimer++;
  if(mode==ROOM_ENTRY){roomEntryTimer++;if((roomEntryTimer>10&&!voiceAudio.playing)||roomEntryTimer>60*12)finishRoomEntry();}
  if(mode==VTD_MODE&&audio.finished)running=false;if(mode==JETIX_MODE&&secretTimer>0){secretTimer--;if(!secretTimer){mode=returnMode;music.autoAdvance=true;music.playNext();}}
  if(mode==GAME&&!paused&&!gameOver&&!phobosDeletedWin&&curType<0){bool anyPiece=false;for(int i=0;i<7;i++)anyPiece|=pieceEnabled[i];if(!anyPiece){emptyRosterFrames++;if(!emptyRosterBored&&emptyRosterFrames>=600){emptyRosterBored=true;boredFrames=0;audio.setPause(true);}else if(emptyRosterBored&&++boredFrames>=156){gameOver=true;gameOverIndex=0;saveRecord();}}}
- if(mode==GAME&&!paused&&!gameOver&&curType>=0){
+ if(mode==GAME&&!paused&&!gameOver&&!phobosDeletedWin&&!clearPending){playFrames++;if(!pauseHintPlayed&&playFrames>=pauseHintEligibleAt&&playFrames%(60*10)==0&&rand()%100<18){if(playPhobosVoice("romfs:/audio/react_phobos_pause_hint.mp3"))pauseHintPlayed=true;}}
+ if(mode==GAME&&!paused&&!gameOver&&!clearPending&&curType>=0){
   if(!phobosFall){if(!fits(curType,curRot,curX,curY+1)){lockFrames++;if(lockFrames>=30){lockPiece();return;}}else lockFrames=0;}
   gravityFrames++;if(gravityFrames>=gravityInterval()){gravityFrames=0;if(fits(curType,curRot,curX,curY+1)){curY++;if(!phobosFall)lockFrames=0;}else if(phobosFall)lockPiece();}
  }
