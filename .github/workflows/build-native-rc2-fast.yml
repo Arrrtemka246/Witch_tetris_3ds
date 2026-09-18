@@ -394,7 +394,8 @@ jobs:
           set -euxo pipefail
           git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/diasurgical/bannertool.git /tmp/bannertool
           make -C /tmp/bannertool -j"$(nproc)"
-          BANNERTOOL=/tmp/bannertool/output/bannertool
+          BANNERTOOL="$(find /tmp/bannertool/output -type f -name bannertool | head -1)"
+          test -n "$BANNERTOOL"
           test -x "$BANNERTOOL"
           "$BANNERTOOL" makesmdh \
             -s "W.I.T.C.H. Tetris" \
