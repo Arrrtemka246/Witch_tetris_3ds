@@ -17,6 +17,9 @@
 
 static constexpr int TOP_W=400, H=240;
 static constexpr int BW=10, BH=20;
+// The two LCDs do not touch physically.  Treat the hinge as a hidden strip of
+// the same virtual scene so the eye does not stretch the throne across it.
+static constexpr float DUAL_HINGE_GAP=56.0f;
 static constexpr u32 BG=C2D_Color32(8,5,18,255);
 static constexpr u32 WHITE=C2D_Color32(245,240,255,255);
 static constexpr u32 ACCENT=C2D_Color32(218,167,255,255);
@@ -70,6 +73,18 @@ struct Art {
         if(!sheet) return; C2D_Image im=C2D_SpriteSheetGetImage(sheet,0);
         float sx=w/(float)im.subtex->width,sy=h/(float)im.subtex->height;
         C2D_DrawImageAt(im,x+stereoX(z),y,z,nullptr,sx,sy);
+    }
+    void drawDualContinuation(bool bottom,float z=0.1f) const {
+        if(!sheet) return;C2D_Image im=C2D_SpriteSheetGetImage(sheet,0);
+        float iw=(float)im.subtex->width,ih=(float)im.subtex->height;
+        float virtualH=H*2.0f+DUAL_HINGE_GAP;
+        // Uniform scale keeps the castle architecture undistorted.  The lower
+        // LCD is the centred 320-pixel viewport of the same 400-pixel scene.
+        float s=std::max(TOP_W/iw,virtualH/ih);
+        float sceneX=(TOP_W-iw*s)*0.5f;
+        float viewX=bottom?40.0f:0.0f;
+        float viewY=bottom?(H+DUAL_HINGE_GAP):0.0f;
+        C2D_DrawImageAt(im,sceneX-viewX+stereoX(z),-viewY,z,nullptr,s,s);
     }
 };
 
@@ -410,7 +425,16 @@ static void drawBoardSlice(float x0,float y0,float cell,int yStart,int count){
  u32 grid=C2D_Color32(210,175,245,78);
  for(int x=0;x<=BW;x++)C2D_DrawRectSolid(glassX+x*cell,y0,0.34f,1,count*cell,grid);
  for(int y=0;y<=count;y++)C2D_DrawRectSolid(glassX,y0+y*cell,0.34f,BW*cell,1,grid);
- if(!phobosFall&&curType>=0){int gy=curY;while(fits(curType,curRot,curX,gy+1))gy++;for(int i=0;i<4;i++){int x,y;blockPos(curType,curRot,i,x,y);x+=curX;y+=gy;if(y<yStart||y>=yStart+count)continue;float dx=x0+x*cell+stereoX(0.43f),dy=y0+(y-yStart)*cell;u32 gc=C2D_Color32(238,190,255,95);C2D_DrawRectSolid(dx+1,dy+1,0.43f,cell-2,1,gc);C2D_DrawRectSolid(dx+1,dy+cell-2,0.43f,cell-2,1,gc);C2D_DrawRectSolid(dx+1,dy+1,0.43f,1,cell-2,gc);C2D_DrawRectSolid(dx+cell-2,dy+1,0.43f,1,cell-2,gc);}}
+ if(!phobosFall&&curType>=0){
+  int gy=curY;while(fits(curType,curRot,curX,gy+1))gy++;
+  for(int i=0;i<4;i++){int bx,by;blockPos(curType,curRot,i,bx,by);int x=bx+curX,currentY=by+curY,landingY=by+gy;
+   // A dotted centre trail remains readable over both bright and dark castle
+   // details, while the landing ghost gets a translucent fill and 2px rim.
+   int pathStart=std::max(currentY+1,yStart),pathEnd=std::min(landingY,yStart+count-1);float px=x0+x*cell+cell*.5f+stereoX(0.42f);
+   for(int py=pathStart;py<pathEnd;py++){float yy=y0+(py-yStart)*cell+cell*.25f;for(float d=0;d<cell*.5f;d+=6.0f)C2D_DrawRectSolid(px-1,yy+d,0.42f,2,3,C2D_Color32(245,215,255,115));}
+   if(landingY<yStart||landingY>=yStart+count)continue;float dx=x0+x*cell+stereoX(0.44f),dy=y0+(landingY-yStart)*cell;u32 fill=C2D_Color32(205,125,255,52),rim=C2D_Color32(250,225,255,205);C2D_DrawRectSolid(dx+2,dy+2,0.43f,cell-4,cell-4,fill);C2D_DrawRectSolid(dx+1,dy+1,0.44f,cell-2,2,rim);C2D_DrawRectSolid(dx+1,dy+cell-3,0.44f,cell-2,2,rim);C2D_DrawRectSolid(dx+1,dy+1,0.44f,2,cell-2,rim);C2D_DrawRectSolid(dx+cell-3,dy+1,0.44f,2,cell-2,rim);
+  }
+ }
  for(int yy=0;yy<count;yy++){int y=yStart+yy;for(int x=0;x<BW;x++){int code=board[y][x];if(!code)continue;if(code<0)drawPlain(x0+x*cell,y0+yy*cell,cell,cellType(code),0.5f);else drawSpriteCell((code&255)-1,(code&0x10000)!=0,x0+x*cell,y0+yy*cell,cell,0.5f);}}
  if(curType>=0)for(int i=0;i<4;i++){int x,y;blockPos(curType,curRot,i,x,y);x+=curX;y+=curY;if(y<yStart||y>=yStart+count)continue;float dx=x0+x*cell,dy=y0+(y-yStart)*cell;if(plainMode())drawPlain(dx,dy,cell,curType,0.6f);else drawSpriteCell(spriteIndex(curType,curRot,i),phobosRoute&&horrorPieces,dx,dy,cell,0.6f);}
  if(clearFxTimer>0){
@@ -491,7 +515,7 @@ static void drawBoot(){
  C2D_TargetClear(botTarget,C2D_Color32(0,0,0,255));beginBottom();centerText(160,96,0.52f,DIM,"PRESS ANY KEY");centerText(160,132,0.38f,DIM,"TO CONTINUE");
 }
 
-static void drawMenu(){bgMenu.drawCover(0,0,TOP_W,H,0.04f);C2D_DrawRectSolid(-10+stereoX(0.16f),0,0.16f,420,H,C2D_Color32(0,0,0,90));if(phobosEnabled)phobosMenu.drawFit(250,18,145,216,0.88f);float oz=textZ,od=textDepth;textZ=0.76f;textDepth=0.76f;drawText(18,20,0.72f,ACCENT,"W.I.T.C.H. TETRIS 3DS");drawText(20,48,0.43f,WHITE,"NATIVE STORY TEST 12");const char* items[]={"NEW GAME","RECORDS","CUTSCENES","SETTINGS","EXIT"};for(int i=0;i<5;i++){if(i==menuIndex)C2D_DrawRectSolid(18+stereoX(0.58f),76+i*31,0.58f,205,26,C2D_Color32(95,45,120,220));drawText(28,78+i*31,0.50f,i==menuIndex?WHITE:DIM,"> %s",items[i]);}textZ=oz;textDepth=od;C2D_TargetClear(botTarget,BG);beginBottom();centerText(160,25,0.6f,ACCENT,"MAIN MENU");centerText(160,70,0.45f,WHITE,"D-Pad: select   A: open");centerText(160,105,0.39f,DIM,"Character choice unlocks at 200 lines");centerText(160,185,0.4f,DIM,"START: exit");}
+static void drawMenu(){bgMenu.drawCover(0,0,TOP_W,H,0.04f);C2D_DrawRectSolid(-10+stereoX(0.16f),0,0.16f,420,H,C2D_Color32(0,0,0,90));if(phobosEnabled)phobosMenu.drawFit(250,18,145,216,0.88f);float oz=textZ,od=textDepth;textZ=0.76f;textDepth=0.76f;drawText(18,20,0.72f,ACCENT,"W.I.T.C.H. TETRIS 3DS");drawText(20,48,0.43f,WHITE,"NATIVE STORY TEST 13");const char* items[]={"NEW GAME","RECORDS","CUTSCENES","SETTINGS","EXIT"};for(int i=0;i<5;i++){if(i==menuIndex)C2D_DrawRectSolid(18+stereoX(0.58f),76+i*31,0.58f,205,26,C2D_Color32(95,45,120,220));drawText(28,78+i*31,0.50f,i==menuIndex?WHITE:DIM,"> %s",items[i]);}textZ=oz;textDepth=od;C2D_TargetClear(botTarget,BG);beginBottom();centerText(160,25,0.6f,ACCENT,"MAIN MENU");centerText(160,70,0.45f,WHITE,"D-Pad: select   A: open");centerText(160,105,0.39f,DIM,"Character choice unlocks at 200 lines");centerText(160,185,0.4f,DIM,"START: exit");}
 static void drawRecords(){
  drawText(18,14,0.70f,ACCENT,"RECORDS");drawText(25,47,0.35f,DIM,"#      LINES        SCORE");
  if(records.empty())centerText(200,108,0.48f,DIM,"NO RECORDS YET");
@@ -543,7 +567,7 @@ static void drawGameplayEffects(float width,float height,bool topScreen){
 }
 static void drawGame(){
  int bg=lines<100?0:(guardiansRoute?2:1);
- if(dualScreen)bgGame[bg].drawStretch(0,0,400,480,0.08f);else bgGame[bg].drawCover(0,0,400,240,0.08f);
+ if(dualScreen)bgGame[bg].drawDualContinuation(false,0.08f);else bgGame[bg].drawCover(0,0,400,240,0.08f);
  C2D_DrawRectSolid(stereoX(0.15f),0,0.15f,400,240,C2D_Color32(0,0,0,12));
  if(dualScreen){drawBoardSlice(80,0,24,0,10);drawText(5,8,0.42f,ACCENT,"HOLD");if(holdType>=0)drawMiniPiece(holdType,4,38,10);drawText(326,8,0.42f,ACCENT,"NEXT");drawMiniPiece(nextType,328,38,10);drawText(318,100,0.38f,WHITE,"%d",score);drawText(318,125,0.34f,DIM,"L %d",lines);if(gameplayVtdTimer<=0&&phobosEnabled&&!guardiansRoute)phobosGame.drawFit(315,150,82,88,0.88f);}
  else{if(gameplayVtdTimer<=0&&phobosEnabled&&!guardiansRoute)phobosGame.drawFit(290,32,105,200,0.88f);drawBoardSlice(118,18,10,0,20);drawText(10,20,0.45f,ACCENT,"HOLD");if(holdType>=0)drawMiniPiece(holdType,15,52,10);drawText(238,20,0.45f,ACCENT,"NEXT");drawMiniPiece(nextType,245,52,10);drawText(8,128,0.38f,WHITE,"SCORE %d",score);drawText(8,150,0.38f,WHITE,"LINES %d",lines);}
@@ -553,7 +577,7 @@ static void drawGame(){
  if(gameOver){drawGameOverTop();drawGameOverBottom();return;}
  drawGameplayEffects(400,240,true);
  C2D_TargetClear(botTarget,BG);beginBottom();
- if(dualScreen){bgGame[bg].drawStretch(-40,-240,400,480,0.08f);C2D_DrawRectSolid(0,0,0.15f,320,240,C2D_Color32(0,0,0,12));drawBoardSlice(40,0,24,10,10);C2D_DrawRectSolid(2,198,0.9f,36,38,C2D_Color32(90,45,120,235));centerText(20,207,0.29f,WHITE,"KB");}
+ if(dualScreen){bgGame[bg].drawDualContinuation(true,0.08f);C2D_DrawRectSolid(0,0,0.15f,320,240,C2D_Color32(0,0,0,12));drawBoardSlice(40,0,24,10,10);C2D_DrawRectSolid(2,198,0.9f,36,38,C2D_Color32(90,45,120,235));centerText(20,207,0.29f,WHITE,"KB");}
  else{bgGame[bg].drawCover(0,0,320,240,0.08f);C2D_DrawRectSolid(0,0,0.15f,320,240,C2D_Color32(0,0,0,145));centerText(160,15,0.46f,ACCENT,"CONTROLS");drawText(16,52,0.38f,WHITE,"D-Pad move   UP/A/B rotate");drawText(16,78,0.38f,WHITE,"Y hard drop       X hold");drawText(16,104,0.38f,WHITE,"L/R original phase shuffle");drawText(16,130,0.38f,WHITE,"START/SELECT pause");drawText(16,156,0.36f,DIM,"A+B: dual-screen layout");C2D_DrawRectSolid(178,194,0.3f,126,36,C2D_Color32(90,45,120,235));centerText(241,203,0.42f,WHITE,"KEYBOARD");}
  drawGameplayEffects(320,240,false);
 }

@@ -1,4 +1,4 @@
-name: Build Native 3DS Story Test 12
+name: Build Native 3DS Story Test 13
 
 on:
   push:
@@ -395,16 +395,16 @@ jobs:
           cp witch_tetris_3ds.smdh native3ds/witch_tetris_3ds_rc2.smdh
           cd native3ds
           make -j"$(nproc)"
-          cp witch_tetris_3ds_rc2.3dsx WITCH_Tetris_3DS_Story_Test_12.3dsx
+          cp witch_tetris_3ds_rc2.3dsx WITCH_Tetris_3DS_Story_Test_13.3dsx
           ls -lh witch_tetris_3ds_rc2.3dsx
           test -s witch_tetris_3ds_rc2.3dsx
 
       - name: Upload native RC2
         uses: actions/upload-artifact@v4
         with:
-          name: witch-tetris-3ds-story-test-12-native
+          name: witch-tetris-3ds-story-test-13-native
           path: |
-            native3ds/WITCH_Tetris_3DS_Story_Test_12.3dsx
+            native3ds/WITCH_Tetris_3DS_Story_Test_13.3dsx
             native3ds/witch_tetris_3ds_rc2.map
             native3ds/source/main.cpp
             witch_tetris_3ds.smdh
@@ -419,7 +419,7 @@ jobs:
       - name: Download native RC2
         uses: actions/download-artifact@v4
         with:
-          name: witch-tetris-3ds-story-test-12-native
+          name: witch-tetris-3ds-story-test-13-native
           path: package
 
       - name: Install packaging dependencies
@@ -452,21 +452,21 @@ jobs:
         run: |
           set -euxo pipefail
           find package -maxdepth 4 -type f -ls
-          DSX="$(find package -type f -name WITCH_Tetris_3DS_Story_Test_12.3dsx | head -1)"
+          DSX="$(find package -type f -name WITCH_Tetris_3DS_Story_Test_13.3dsx | head -1)"
           SMDH="$(find package -type f -name witch_tetris_3ds.smdh | head -1)"
           test -n "$DSX"
           test -n "$SMDH"
           ./cxitool -n WTetris -c CTR-H-WTTR -t 000400000FCA3D00 "$DSX" witch_tetris_3ds_rc3.cxi
-          ./makerom -f cia -o WITCH_Tetris_3DS_Story_Test_12.cia -target t -i witch_tetris_3ds_rc3.cxi:0:0 -ignoresign -icon "$SMDH"
-          sha256sum WITCH_Tetris_3DS_Story_Test_12.cia | tee WITCH_Tetris_3DS_Story_Test_12.cia.sha256
-          ls -lh WITCH_Tetris_3DS_Story_Test_12.cia
+          ./makerom -f cia -o WITCH_Tetris_3DS_Story_Test_13.cia -target t -i witch_tetris_3ds_rc3.cxi:0:0 -ignoresign -icon "$SMDH"
+          sha256sum WITCH_Tetris_3DS_Story_Test_13.cia | tee WITCH_Tetris_3DS_Story_Test_13.cia.sha256
+          ls -lh WITCH_Tetris_3DS_Story_Test_13.cia
 
       - name: Upload final RC2
         uses: actions/upload-artifact@v4
         with:
-          name: witch-tetris-3ds-story-test-12-final
+          name: witch-tetris-3ds-story-test-13-final
           path: |
-            WITCH_Tetris_3DS_Story_Test_12.cia
-            WITCH_Tetris_3DS_Story_Test_12.cia.sha256
+            WITCH_Tetris_3DS_Story_Test_13.cia
+            WITCH_Tetris_3DS_Story_Test_13.cia.sha256
           compression-level: 0
           retention-days: 7
