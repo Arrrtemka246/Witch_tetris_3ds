@@ -1,4 +1,4 @@
-name: Build Native 3DS Story Test 13
+name: Build Native 3DS Story Test 14
 
 on:
   push:
@@ -65,7 +65,7 @@ jobs:
         run: |
           set -eux
           apt-get update
-          apt-get install -y curl bzip2 make imagemagick ffmpeg python3-pygame
+          apt-get install -y curl bzip2 make imagemagick ffmpeg python3-pygame git g++ unzip
           test -x "$DEVKITARM/bin/arm-none-eabi-g++"
           test -f "$DEVKITPRO/libctru/lib/libctru.a"
           test -f "$DEVKITPRO/libctru/include/3ds.h"
@@ -388,55 +388,31 @@ jobs:
           test -s native3ds/romfs/audio/will_reverse.mp3
           test -s native3ds/romfs/audio/phobos_reverse.mp3
 
-      - name: Build 3DSX
-        shell: bash
-        run: |
-          set -eux
-          cp witch_tetris_3ds.smdh native3ds/witch_tetris_3ds_rc2.smdh
-          cd native3ds
-          make -j"$(nproc)"
-          cp witch_tetris_3ds_rc2.3dsx WITCH_Tetris_3DS_Story_Test_13.3dsx
-          ls -lh witch_tetris_3ds_rc2.3dsx
-          test -s witch_tetris_3ds_rc2.3dsx
-
-      - name: Upload native RC2
-        uses: actions/upload-artifact@v4
-        with:
-          name: witch-tetris-3ds-story-test-13-native
-          path: |
-            native3ds/WITCH_Tetris_3DS_Story_Test_13.3dsx
-            native3ds/witch_tetris_3ds_rc2.map
-            native3ds/source/main.cpp
-            witch_tetris_3ds.smdh
-          compression-level: 0
-          retention-days: 7
-
-  package-cia:
-    needs: build-native
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Download native RC2
-        uses: actions/download-artifact@v4
-        with:
-          name: witch-tetris-3ds-story-test-13-native
-          path: package
-
-      - name: Install packaging dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y autoconf automake build-essential libtool curl unzip
-
-      - name: Build cxitool
+      - name: Build HOME Menu icon, stereoscopic banner and jingle
         shell: bash
         run: |
           set -euxo pipefail
-          git clone --depth 1 --branch cxi-stuff https://github.com/devkitPro/3dstools.git /tmp/3dstools
-          cd /tmp/3dstools
-          ./autogen.sh
-          ./configure
-          make -j"$(nproc)" cxitool
-          cp cxitool "$GITHUB_WORKSPACE/cxitool"
+          git clone --depth 1 https://github.com/diasurgical/bannertool.git /tmp/bannertool
+          make -C /tmp/bannertool -j"$(nproc)"
+          BANNERTOOL=/tmp/bannertool/output/bannertool
+          test -x "$BANNERTOOL"
+          "$BANNERTOOL" makesmdh \
+            -s "W.I.T.C.H. Tetris" \
+            -l "W.I.T.C.H. Tetris 3DS" \
+            -p "Arrrtemka246" \
+            -rs "W.I.T.C.H. Tetris" \
+            -rl "W.I.T.C.H. Tetris для Nintendo 3DS" \
+            -rp "Arrrtemka246" \
+            -i native3ds/assets/home_menu/icon.png \
+            -r regionfree \
+            -f visible,allow3d \
+            -o native3ds/witch_tetris_3ds_rc2.smdh
+          "$BANNERTOOL" makebanner \
+            -i native3ds/assets/home_menu/banner.png \
+            -a native3ds/assets/home_menu/home_menu_jingle.ogg \
+            -o native3ds/witch_tetris_3ds_rc2.bnr
+          test "$(stat -c%s native3ds/witch_tetris_3ds_rc2.smdh)" -eq 14016
+          test -s native3ds/witch_tetris_3ds_rc2.bnr
 
       - name: Install makerom
         shell: bash
@@ -447,26 +423,52 @@ jobs:
           find /tmp/makerom -type f -name makerom -exec cp {} "$GITHUB_WORKSPACE/makerom" \;
           chmod +x "$GITHUB_WORKSPACE/makerom"
 
-      - name: Package CIA
+      - name: Build 3DSX
+        shell: bash
+        run: |
+          set -eux
+          cd native3ds
+          make -j"$(nproc)"
+          cp witch_tetris_3ds_rc2.3dsx WITCH_Tetris_3DS_Story_Test_14.3dsx
+          ls -lh witch_tetris_3ds_rc2.3dsx
+          test -s witch_tetris_3ds_rc2.3dsx
+
+      - name: Package CIA with HOME Menu presentation
         shell: bash
         run: |
           set -euxo pipefail
-          find package -maxdepth 4 -type f -ls
-          DSX="$(find package -type f -name WITCH_Tetris_3DS_Story_Test_13.3dsx | head -1)"
-          SMDH="$(find package -type f -name witch_tetris_3ds.smdh | head -1)"
-          test -n "$DSX"
-          test -n "$SMDH"
-          ./cxitool -n WTetris -c CTR-H-WTTR -t 000400000FCA3D00 "$DSX" witch_tetris_3ds_rc3.cxi
-          ./makerom -f cia -o WITCH_Tetris_3DS_Story_Test_13.cia -target t -i witch_tetris_3ds_rc3.cxi:0:0 -ignoresign -icon "$SMDH"
-          sha256sum WITCH_Tetris_3DS_Story_Test_13.cia | tee WITCH_Tetris_3DS_Story_Test_13.cia.sha256
-          ls -lh WITCH_Tetris_3DS_Story_Test_13.cia
+          ./makerom \
+            -f cia \
+            -target t \
+            -exefslogo \
+            -o WITCH_Tetris_3DS_Story_Test_14.cia \
+            -elf native3ds/witch_tetris_3ds_rc2.elf \
+            -rsf native3ds/cia.rsf \
+            -banner native3ds/witch_tetris_3ds_rc2.bnr \
+            -icon native3ds/witch_tetris_3ds_rc2.smdh \
+            -DAPP_ROMFS=native3ds/romfs/
+          sha256sum WITCH_Tetris_3DS_Story_Test_14.cia | tee WITCH_Tetris_3DS_Story_Test_14.cia.sha256
+          test -s WITCH_Tetris_3DS_Story_Test_14.cia
 
-      - name: Upload final RC2
+      - name: Upload native RC2
         uses: actions/upload-artifact@v4
         with:
-          name: witch-tetris-3ds-story-test-13-final
+          name: witch-tetris-3ds-story-test-14-native
           path: |
-            WITCH_Tetris_3DS_Story_Test_13.cia
-            WITCH_Tetris_3DS_Story_Test_13.cia.sha256
+            native3ds/WITCH_Tetris_3DS_Story_Test_14.3dsx
+            native3ds/witch_tetris_3ds_rc2.map
+            native3ds/source/main.cpp
+            native3ds/witch_tetris_3ds_rc2.smdh
+            native3ds/witch_tetris_3ds_rc2.bnr
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload final CIA
+        uses: actions/upload-artifact@v4
+        with:
+          name: witch-tetris-3ds-story-test-14-final
+          path: |
+            WITCH_Tetris_3DS_Story_Test_14.cia
+            WITCH_Tetris_3DS_Story_Test_14.cia.sha256
           compression-level: 0
           retention-days: 7
