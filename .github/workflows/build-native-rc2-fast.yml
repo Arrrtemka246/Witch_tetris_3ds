@@ -1,4 +1,4 @@
-name: Build Native 3DS Story Test 10
+name: Build Native 3DS Story Test 11
 
 on:
   push:
@@ -241,10 +241,17 @@ jobs:
           encode_voice assets/audio/voice/phobos/extra2/last_hope_universe.wav native3ds/romfs/audio/react_phobos_start_4.mp3
           encode_voice assets/audio/voice/phobos/extra2/new_era_phobos.wav native3ds/romfs/audio/react_phobos_start_5.mp3
           encode_voice assets/audio/voice/phobos/extra2/destroy_weak_link.wav native3ds/romfs/audio/react_destroy_weak.mp3
+          encode_voice assets/audio/voice/phobos/rotate_hint.mp3 native3ds/romfs/audio/react_phobos_rotate_hint.mp3
+          encode_voice assets/audio/voice/phobos/hold_hint.mp3 native3ds/romfs/audio/react_phobos_hold_hint.mp3
+          pause_sources=(extra/well.wav extra2/no_need_to_hurry.wav extra2/waiting_achieves.wav extra2/whats_wrong_short.wav extra2/whats_wrong_full.wav extra2/what_do_you_want.wav)
+          for i in 0 1 2 3 4 5; do encode_voice "assets/audio/voice/phobos/${pause_sources[$i]}" "native3ds/romfs/audio/react_phobos_pause_${i}.mp3"; done
           encode_voice assets/audio/voice/phobos/not_bad.mp3 native3ds/romfs/audio/react_tetris_not_bad.mp3
           test -s native3ds/romfs/audio/react_earth_3.mp3
           test -s native3ds/romfs/audio/react_blunk_two_3.mp3
           test -s native3ds/romfs/audio/react_phobos_start_5.mp3
+          test -s native3ds/romfs/audio/react_phobos_rotate_hint.mp3
+          test -s native3ds/romfs/audio/react_phobos_hold_hint.mp3
+          test -s native3ds/romfs/audio/react_phobos_pause_5.mp3
 
       - name: Add PORN-code gallery cards
         shell: bash
@@ -355,16 +362,16 @@ jobs:
           cp witch_tetris_3ds.smdh native3ds/witch_tetris_3ds_rc2.smdh
           cd native3ds
           make -j"$(nproc)"
-          cp witch_tetris_3ds_rc2.3dsx WITCH_Tetris_3DS_Story_Test_10.3dsx
+          cp witch_tetris_3ds_rc2.3dsx WITCH_Tetris_3DS_Story_Test_11.3dsx
           ls -lh witch_tetris_3ds_rc2.3dsx
           test -s witch_tetris_3ds_rc2.3dsx
 
       - name: Upload native RC2
         uses: actions/upload-artifact@v4
         with:
-          name: witch-tetris-3ds-story-test-10-native
+          name: witch-tetris-3ds-story-test-11-native
           path: |
-            native3ds/WITCH_Tetris_3DS_Story_Test_10.3dsx
+            native3ds/WITCH_Tetris_3DS_Story_Test_11.3dsx
             native3ds/witch_tetris_3ds_rc2.map
             native3ds/source/main.cpp
             witch_tetris_3ds.smdh
@@ -379,7 +386,7 @@ jobs:
       - name: Download native RC2
         uses: actions/download-artifact@v4
         with:
-          name: witch-tetris-3ds-story-test-10-native
+          name: witch-tetris-3ds-story-test-11-native
           path: package
 
       - name: Install packaging dependencies
@@ -412,21 +419,21 @@ jobs:
         run: |
           set -euxo pipefail
           find package -maxdepth 4 -type f -ls
-          DSX="$(find package -type f -name WITCH_Tetris_3DS_Story_Test_10.3dsx | head -1)"
+          DSX="$(find package -type f -name WITCH_Tetris_3DS_Story_Test_11.3dsx | head -1)"
           SMDH="$(find package -type f -name witch_tetris_3ds.smdh | head -1)"
           test -n "$DSX"
           test -n "$SMDH"
           ./cxitool -n WTetris -c CTR-H-WTTR -t 000400000FCA3D00 "$DSX" witch_tetris_3ds_rc3.cxi
-          ./makerom -f cia -o WITCH_Tetris_3DS_Story_Test_10.cia -target t -i witch_tetris_3ds_rc3.cxi:0:0 -ignoresign -icon "$SMDH"
-          sha256sum WITCH_Tetris_3DS_Story_Test_10.cia | tee WITCH_Tetris_3DS_Story_Test_10.cia.sha256
-          ls -lh WITCH_Tetris_3DS_Story_Test_10.cia
+          ./makerom -f cia -o WITCH_Tetris_3DS_Story_Test_11.cia -target t -i witch_tetris_3ds_rc3.cxi:0:0 -ignoresign -icon "$SMDH"
+          sha256sum WITCH_Tetris_3DS_Story_Test_11.cia | tee WITCH_Tetris_3DS_Story_Test_11.cia.sha256
+          ls -lh WITCH_Tetris_3DS_Story_Test_11.cia
 
       - name: Upload final RC2
         uses: actions/upload-artifact@v4
         with:
-          name: witch-tetris-3ds-story-test-10-final
+          name: witch-tetris-3ds-story-test-11-final
           path: |
-            WITCH_Tetris_3DS_Story_Test_10.cia
-            WITCH_Tetris_3DS_Story_Test_10.cia.sha256
+            WITCH_Tetris_3DS_Story_Test_11.cia
+            WITCH_Tetris_3DS_Story_Test_11.cia.sha256
           compression-level: 0
           retention-days: 7
