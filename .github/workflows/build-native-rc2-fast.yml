@@ -1,4 +1,4 @@
-name: Build Native 3DS Story Test 14
+name: Build Native 3DS Story Test 15
 
 on:
   push:
@@ -149,9 +149,18 @@ jobs:
           convert assets/backgrounds/phase_0_99_throne.png -resize '400x240^' -gravity center -extent 400x240 /tmp/bg_phase0.png
           convert assets/backgrounds/phase_100_199_unstable.png -resize '400x240^' -gravity center -extent 400x240 /tmp/bg_phase1.png
           convert assets/backgrounds/phase_200_plus_liberated.png -resize '400x240^' -gravity center -extent 400x240 /tmp/bg_phase2.png
+          convert assets/backgrounds/phase_0_99_throne.png -resize '764x1024^' -gravity center -extent 764x1024 /tmp/bg_phase0_dual.png
+          convert assets/backgrounds/phase_100_199_unstable.png -resize '764x1024^' -gravity center -extent 764x1024 /tmp/bg_phase1_dual.png
+          convert assets/backgrounds/phase_200_plus_liberated.png -resize '764x1024^' -gravity center -extent 764x1024 /tmp/bg_phase2_dual.png
           tex3ds /tmp/bg_phase0.png -f rgb565 -z auto -o native3ds/romfs/gfx/bg_phase0.t3x
           tex3ds /tmp/bg_phase1.png -f rgb565 -z auto -o native3ds/romfs/gfx/bg_phase1.t3x
           tex3ds /tmp/bg_phase2.png -f rgb565 -z auto -o native3ds/romfs/gfx/bg_phase2.t3x
+          tex3ds /tmp/bg_phase0_dual.png -f rgb565 -z auto -o native3ds/romfs/gfx/bg_phase0_dual.t3x
+          tex3ds /tmp/bg_phase1_dual.png -f rgb565 -z auto -o native3ds/romfs/gfx/bg_phase1_dual.t3x
+          tex3ds /tmp/bg_phase2_dual.png -f rgb565 -z auto -o native3ds/romfs/gfx/bg_phase2_dual.t3x
+          test -s native3ds/romfs/gfx/bg_phase0_dual.t3x
+          test -s native3ds/romfs/gfx/bg_phase1_dual.t3x
+          test -s native3ds/romfs/gfx/bg_phase2_dual.t3x
           test -s native3ds/romfs/gfx/bg_phase0.t3x
           test -s native3ds/romfs/gfx/bg_phase1.t3x
           test -s native3ds/romfs/gfx/bg_phase2.t3x
@@ -258,6 +267,10 @@ jobs:
           encode_voice assets/audio/voice/phobos/extra2/well_girls.wav native3ds/romfs/audio/react_phobos_well_girls.mp3
           encode_voice assets/audio/voice/phobos/extra2/expected_no_less.wav native3ds/romfs/audio/react_phobos_expected_no_less.mp3
           encode_voice assets/audio/voice/phobos/extra2/you_loser.wav native3ds/romfs/audio/react_phobos_you_loser.mp3
+          encode_voice assets/audio/voice/phobos/extra2/you_will_pay_short.wav native3ds/romfs/audio/story100_phobos_pay_short.mp3
+          encode_voice assets/audio/voice/phobos/extra2/you_will_pay_full.wav native3ds/romfs/audio/story100_phobos_pay_full.mp3
+          test -s native3ds/romfs/audio/story100_phobos_pay_short.mp3
+          test -s native3ds/romfs/audio/story100_phobos_pay_full.mp3
           test -s native3ds/romfs/audio/react_earth_3.mp3
           test -s native3ds/romfs/audio/react_blunk_two_3.mp3
           test -s native3ds/romfs/audio/react_phobos_start_5.mp3
@@ -415,13 +428,16 @@ jobs:
           test "$(stat -c%s native3ds/witch_tetris_3ds_rc2.smdh)" -eq 14016
           test -s native3ds/witch_tetris_3ds_rc2.bnr
 
-      - name: Install makerom
+      - name: Build makerom for the runner
         shell: bash
         run: |
           set -euxo pipefail
-          curl -L --fail --retry 3 -o /tmp/makerom.zip https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.19.0/makerom-v0.19.0-ubuntu_x86_64.zip
-          unzip -q /tmp/makerom.zip -d /tmp/makerom
-          find /tmp/makerom -type f -name makerom -exec cp {} "$GITHUB_WORKSPACE/makerom" \;
+          git clone --depth 1 https://github.com/3DSGuy/Project_CTR.git /tmp/project-ctr
+          make -C /tmp/project-ctr/makerom deps -j"$(nproc)"
+          make -C /tmp/project-ctr/makerom -j"$(nproc)"
+          MAKEROM="$(find /tmp/project-ctr/makerom -maxdepth 3 -type f -name makerom | head -1)"
+          test -n "$MAKEROM"
+          cp "$MAKEROM" "$GITHUB_WORKSPACE/makerom"
           chmod +x "$GITHUB_WORKSPACE/makerom"
 
       - name: Build 3DSX
@@ -430,7 +446,7 @@ jobs:
           set -eux
           cd native3ds
           make -j"$(nproc)"
-          cp witch_tetris_3ds_rc2.3dsx WITCH_Tetris_3DS_Story_Test_14.3dsx
+          cp witch_tetris_3ds_rc2.3dsx WITCH_Tetris_3DS_Story_Test_15.3dsx
           ls -lh witch_tetris_3ds_rc2.3dsx
           test -s witch_tetris_3ds_rc2.3dsx
 
@@ -442,21 +458,21 @@ jobs:
             -f cia \
             -target t \
             -exefslogo \
-            -o WITCH_Tetris_3DS_Story_Test_14.cia \
+            -o WITCH_Tetris_3DS_Story_Test_15.cia \
             -elf native3ds/witch_tetris_3ds_rc2.elf \
             -rsf native3ds/cia.rsf \
             -banner native3ds/witch_tetris_3ds_rc2.bnr \
             -icon native3ds/witch_tetris_3ds_rc2.smdh \
             -DAPP_ROMFS=native3ds/romfs/
-          sha256sum WITCH_Tetris_3DS_Story_Test_14.cia | tee WITCH_Tetris_3DS_Story_Test_14.cia.sha256
-          test -s WITCH_Tetris_3DS_Story_Test_14.cia
+          sha256sum WITCH_Tetris_3DS_Story_Test_15.cia | tee WITCH_Tetris_3DS_Story_Test_15.cia.sha256
+          test -s WITCH_Tetris_3DS_Story_Test_15.cia
 
       - name: Upload native RC2
         uses: actions/upload-artifact@v4
         with:
-          name: witch-tetris-3ds-story-test-14-native
+          name: witch-tetris-3ds-story-test-15-native
           path: |
-            native3ds/WITCH_Tetris_3DS_Story_Test_14.3dsx
+            native3ds/WITCH_Tetris_3DS_Story_Test_15.3dsx
             native3ds/witch_tetris_3ds_rc2.map
             native3ds/source/main.cpp
             native3ds/witch_tetris_3ds_rc2.smdh
@@ -467,9 +483,9 @@ jobs:
       - name: Upload final CIA
         uses: actions/upload-artifact@v4
         with:
-          name: witch-tetris-3ds-story-test-14-final
+          name: witch-tetris-3ds-story-test-15-final
           path: |
-            WITCH_Tetris_3DS_Story_Test_14.cia
-            WITCH_Tetris_3DS_Story_Test_14.cia.sha256
+            WITCH_Tetris_3DS_Story_Test_15.cia
+            WITCH_Tetris_3DS_Story_Test_15.cia.sha256
           compression-level: 0
           retention-days: 7
